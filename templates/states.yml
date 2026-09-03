@@ -1,0 +1,55 @@
+# 购房状态机 — canonical 状态定义
+# watchlist.md 中"状态"列只允许使用本表的 canonical 名称。
+# 用户可用别名输入，落库前必须转为 canonical。terminal: true = 终态，保留历史行不删。
+
+- canonical: 关注
+  aliases: [watching, 收藏, 心仪, 待评估]
+  description: 已发现、尚未跑完整评估的房源
+  dashboard_group: pipeline
+
+- canonical: 已评估
+  aliases: [evaluated, 评级完成, 打分完成]
+  description: 已生成评级报告并登记
+  dashboard_group: pipeline
+
+- canonical: 已约看
+  aliases: [viewing_scheduled, 约看, 待看房, 约了带看]
+  description: 已与中介/房东约定看房时间
+  dashboard_group: active
+
+- canonical: 已看房
+  aliases: [viewed, 看过了, 带看完成]
+  description: 完成现场带看（可多次）
+  dashboard_group: active
+
+- canonical: 谈判中
+  aliases: [negotiating, 议价中, 磁商中, 磋商中]
+  description: 正在议价或条件磋商
+  dashboard_group: active
+
+- canonical: 已认购
+  aliases: [subscribed, 认购, 已下定, 付了定金]
+  description: 已交定金/签认购书（注意：定金有法律效力）
+  dashboard_group: active
+
+- canonical: 网签
+  aliases: [contract_signed, 已网签, 签合同]
+  description: 买卖合同已网签备案
+  dashboard_group: closing
+
+- canonical: 已过户
+  aliases: [transferred, 过户完成, 交房完成, 成交]
+  description: 过户（及交房）完成
+  terminal: true
+  dashboard_group: done
+
+- canonical: 弃购
+  aliases: [discarded, 放弃, 黄了, 不看了, pass]
+  description: 主动放弃该房源
+  terminal: true
+  dashboard_group: done
+
+- canonical: 暂缓
+  aliases: [paused, 挂起, 等等看]
+  description: 暂时不推进，保留观察
+  dashboard_group: pipeline

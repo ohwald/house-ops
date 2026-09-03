@@ -1,0 +1,21 @@
+# ===== 用户层：运行时生成或含个人信息，不入库（见 AGENTS.md Data Contract）=====
+
+# 需求画像（入库的是 profile.example.yml）
+config/profile.yml
+
+# 画像语义层与家规（入库的是 *.template.md）
+modes/_profile.md
+modes/_custom.md
+
+# 运行时数据：整体忽略，只保留 .gitkeep 占位符——
+# 新增的生成文件自动被覆盖，无需逐个补充规则
+data/*
+!data/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# ===== secrets 与本地环境 =====
+.env
+.env.*
+**/.env.local
+.mcp.json

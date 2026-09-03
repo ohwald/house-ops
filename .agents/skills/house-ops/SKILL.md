@@ -1,0 +1,67 @@
+---
+name: house-ops
+description: >-
+  AI 购房决策指挥中心——多轮对话明确购房需求，对公开在售房源（优先中国大陆）
+  做个性化评级打分，深挖高分房源（历史价格/周边环境/本地政策），并给出沟通
+  谈判建议。Use when the user pastes a property listing URL or description,
+  wants to clarify home-buying needs, deep-dive a highly scored property, ask
+  for negotiation advice, or manage the watchlist. 当用户粘贴房源链接或描述、
+  想明确购房需求、深挖某套房源、要谈判沟通建议或管理关注清单时使用。
+arguments: mode
+user-invocable: true
+argument-hint: "[intake | evaluate | deep-dive | negotiate | watchlist]"
+---
+
+# house-ops 技能路由器
+
+## Project Root 解析
+
+从本 SKILL.md 所在位置向上查找同时包含 `AGENTS.md` 和 `modes/` 的目录，记为 PROJECT_ROOT。后续所有读写以 PROJECT_ROOT 为基准（不依赖当前工作目录）。
+
+## 调用说明
+
+- ZCode / Claude Code：`/house-ops <mode>`，或自然语言触发（由 AGENTS.md 的语义路由表映射）。
+- `$mode` 为空时显示下方 Discovery 菜单。
+
+## Mode Routing
+
+| `$mode` 值 | 加载的 mode 文件 |
+|---|---|
+| `intake`（别名：需求、画像、onboarding） | `modes/intake.md` |
+| `evaluate`（别名：评估、评级、打分） | `modes/evaluate.md` |
+| `deep-dive`（别名：深挖、调研、deep） | `modes/deep-dive.md` |
+| `negotiate`（别名：谈判、沟通、约看） | `modes/negotiate.md` |
+| `watchlist`（别名：清单、跟踪、tracker） | `modes/watchlist.md` |
+| 空 | Discovery 菜单 |
+| 非命令但内容像房源（含 URL、小区名+价格等） | `modes/evaluate.md` |
+
+无法识别的 `$mode`：列出上表让用户选择，不要猜。
+
+## 输出语言
+
+读 `config/profile.yml` 的 `language.output`（缺省 `zh`）。将以下指令注入本模式执行：所有面向用户的输出使用该语言（`zh`=简体中文；金额单位"万元"，单价"元/㎡"）。
+
+## Discovery 菜单
+
+```
+house-ops — AI 购房决策指挥中心
+
+  /house-ops intake      多轮对话明确你的购房需求，生成需求画像（首次使用先跑这个）
+  /house-ops evaluate    评估一套房源：粘贴链接或描述，输出六维评级报告
+  /house-ops deep-dive   对高分房源（≥4.0）深挖：历史价格/周边/政策/竞品/产权/生活圈
+  /house-ops negotiate   高分房源的核实清单、议价策略与沟通话术
+  /house-ops watchlist   查看/更新关注清单与看房进度
+
+也可以直接粘贴一条房源链接，我会自动走评估流程。
+```
+
+## 按 Mode 加载上下文
+
+所有模式都先读 `AGENTS.md`（会话已注入则跳过）。然后：
+
+1. **评估类**（`evaluate`、`deep-dive`、`negotiate`）：按顺序读 `modes/_shared.md` → `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件。
+2. **其他**（`intake`、`watchlist`）：读 `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件。
+3. 任何模式涉及**中国政策事实**（限购/税费/利率/学区）时，读 `templates/policy-notes.cn.yml` 并遵守其"用前联网核实"规则。
+4. `watchlist`、`evaluate`、`deep-dive`、`negotiate` 还需读 `templates/states.yml` 以获取 canonical 状态名。
+
+加载顺序纪律：系统层（`_shared.md`）先读，用户层（`_profile.md`、`_custom.md`）后读并覆盖系统默认。
