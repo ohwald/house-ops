@@ -2,12 +2,28 @@
 # 复制为 config/profile.yml 后填写（该文件不入库）。字段可留空，intake 模式会帮你生成。
 
 buyer:
-  self_description: ""        # 家庭结构一句话，如：三口之家，孩子 2029 年上小学
+  self_description: ""        # 家庭结构一句话，如：三口之家，女儿 5 岁，奶奶常来小住
   city: ""                    # 目标城市，如：杭州
   target_districts: []        # 目标区/板块，可空，如：[未来科技城, 崇贤]
-  work_location: ""           # 通勤锚点，如：城西银泰城
-  commute_max_minutes: null   # 单程通勤上限（分钟）
+  work_location: ""           # 主通勤锚点，如：城西银泰城
+  commute_max_minutes: null   # 主通勤单程上限（分钟）
   commute_by_metro: null      # 依赖地铁？true/false/null
+
+family:                       # 家庭结构 → 由 intake 自动翻译成 Fit 衍生需求与硬性 DQ 候选
+  children:                   # 孩子清单（年龄驱动学区紧迫度、房间数、电梯/楼层需求）
+    - age: null               # 当前年龄
+      school_stage: ""        # 未入园 | 幼儿园 | 小学 | 初中 | 高中
+      enrollment_year: null   # 预计入学年份（对口学校与学位核实的基准年）
+  elderly:                    # 老人照护
+    co_resident: null         # 同住？true/false
+    frequent_stay: null       # 常来小住（每周/每月）？true/false
+    mobility_limited: null    # 行动不便？true → 电梯+低楼层/无障碍为硬需求
+    hospital_need: ""         # none | community(社区医院即可) | grade_a(需近三甲)
+  special_needs: []           # 其他特殊需求，如：[无障碍, 养大型犬, 居家办公需独立房间,
+                              #      噪音敏感, 婴儿车出行, 对电梯无要求但需一层储物]
+  second_commuter:            # 双职工第二通勤锚点（可选）
+    location: ""
+    commute_max_minutes: null
 
 budget:
   total_range_wan: [null, null]  # 总价区间（万元）
@@ -20,7 +36,7 @@ budget:
 eligibility:
   purchase_qualification: ""   # 已确认 | 待确认 | 不受限（不限购城市）
   hukou_or_social_security: "" # 户籍/社保情况一句话
-  notes: ""                    # 其他资格说明
+  notes: ""                    # 其他资格说明（如公积金缴存城市与年限）
 
 intent:
   purpose: ""                  # own_stay(自住) | investment(投资) | mixed
@@ -28,22 +44,25 @@ intent:
   holding_horizon_years: null  # 预计持有年限（投资/流通性判断用）
 
 preferences:
-  layout: ""                   # 户型，如：三居两卫
+  layout: ""                   # 户型，如：三居两卫（孩子+老人同住通常 ≥3 居）
   size_range_sqm: [null, null] # 面积区间（㎡）
   building_age_max: null       # 可接受最老房龄（年），如 20
-  elevator_required: null      # 必须电梯？true/false/null
-  floor_preference: ""         # 如：不顶楼不一楼 / 高层好
+  elevator_required: null      # 必须电梯？true/false/null（有老人/幼儿默认应 true）
+  floor_preference: ""         # 如：老人同住 → 低楼层优先；不顶楼不一楼
   decoration: ""               # 毛坯 | 简装可住 | 精装优先 | 无要求
-  school_district_weight: ""   # high | medium | low | none
+  school_district_weight: ""   # high | medium | low | none（有学龄孩子时 intake 会建议 ≥high）
   orientation_preference: ""   # 如：南北通透优先
+  community_quality_weight: "" # 小区软素质（物业/邻居/环境）权重：high | medium | low
+  hospital_weight: ""          # 医疗配套权重：high | medium | low（老人常驻建议 ≥medium）
+  shopping_weight: ""          # 商业配套权重：high | medium | low（山姆/Costco/大型商超等）
   must_have: []                # 硬需求清单（命中缺失即 Fit ⛔）
   nice_to_have: []             # 加分项
-  exclude: []                  # 明确排除：小区/开发商/类型，如：[商办公寓, 某某开发商]
+  exclude: []                  # 明确排除：小区/开发商/类型，如：[商办公寓, 回迁混居, 某某开发商]
 
 # 个性化权重（语义，供 Fit/Global 定性判断用，非算术系数）
 weights:
   can_compromise: []           # 可让步的维度/偏好，如：[装修, 面积下限]
-  cannot_compromise: []        # 不可让步，如：[通勤上限, 电梯]
+  cannot_compromise: []        # 不可让步，如：[通勤上限, 电梯, 学区]
   tradeoff_notes: ""           # 取舍原则一句话，如：预算与学区冲突时保学区
 
 language:

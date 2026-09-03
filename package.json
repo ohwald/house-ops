@@ -1,0 +1,15 @@
+{
+  "name": "house-ops",
+  "version": "0.2.0",
+  "private": true,
+  "description": "AI 购房决策指挥中心 — 房源评级/深挖/谈判建议（提示词操作系统，无运行时依赖）",
+  "type": "module",
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "reserve": "node scripts/reserve-report-num.mjs",
+    "stats": "node scripts/stats.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
