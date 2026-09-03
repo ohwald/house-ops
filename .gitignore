@@ -19,3 +19,6 @@ reports/*
 .env.*
 **/.env.local
 .mcp.json
+
+# ===== 依赖（dashboard 的 ink/react；脚本层本身零依赖）=====
+node_modules/

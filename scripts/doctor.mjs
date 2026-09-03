@@ -25,6 +25,9 @@ const sysFiles = [
   'templates/states.yml', 'templates/policy-notes.cn.yml',
   'templates/contract-checklist.cn.yml',
   'config/profile.example.yml',
+  'package.json',
+  'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
+  'scripts/lib/data.mjs', 'scripts/dashboard.mjs',
 ];
 for (const f of sysFiles) {
   check((await exists(join(root, f))) ? 'pass' : 'fail', `系统文件 ${f}`, exists ? '' : '缺失');

@@ -1,46 +1,15 @@
 #!/usr/bin/env node
 // stats.mjs — 从 reports/*.md 的 Machine Summary 提取统计
 // 用法: node scripts/stats.mjs [PROJECT_ROOT]
-// 契约: Machine Summary 的 YAML fence 紧跟 `## Machine Summary` 标题行，
-//       schema SoT 是 modes/evaluate.md（键名变更需同步本脚本与该文件）。
-// 依赖: 零依赖，YAML 用行级解析（只取 `key: value` 标量，嵌套字段忽略）。
+// 契约: 解析逻辑在 scripts/lib/data.mjs（schema SoT = modes/evaluate.md）。
+// 依赖: 零依赖（仅 node 内置）。
 
-import { readdir, readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectReports } from './lib/data.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
-const reportsDir = join(root, 'reports');
-
-function parseMachineSummary(text) {
-  const start = text.indexOf('## Machine Summary');
-  if (start === -1) return null;
-  const fence = /```ya?ml\n([\s\S]*?)```/.exec(text.slice(start));
-  if (!fence) return null;
-  const obj = {};
-  for (const line of fence[1].split('\n')) {
-    const m = /^(\w+):\s*(.*?)\s*$/.exec(line);
-    if (!m) continue;
-    let v = m[2];
-    if (v === 'null' || v === '') v = null;
-    else if (v === 'true') v = true;
-    else if (v === 'false') v = false;
-    else if (/^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
-    else v = v.replace(/^["']|["']$/g, '');
-    obj[m[1]] = v;
-  }
-  return obj;
-}
-
-const files = (await readdir(reportsDir).catch(() => []))
-  .filter(f => /^\d{3}-.*\.md$/.test(f));
-
-const rows = [];
-for (const f of files) {
-  const text = await readFile(join(reportsDir, f), 'utf8');
-  const ms = parseMachineSummary(text);
-  if (ms) rows.push({ file: f, ...ms });
-}
+const rows = await collectReports(join(root, 'reports'));
 
 if (!rows.length) {
   console.log('reports/ 下没有可解析 Machine Summary 的报告。');

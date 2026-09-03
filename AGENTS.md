@@ -74,6 +74,8 @@
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
+| `scripts/lib/data.mjs` | stats/dashboard 共享数据解析层（报告/watchlist/状态机） |
+| `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
 
 ## First Run — Onboarding
 

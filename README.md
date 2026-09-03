@@ -44,7 +44,7 @@ cd house-ops
 # 4. 之后：直接粘贴一条房源链接（链家/贝壳/安居客/中原等），自动走评估流程
 ```
 
-无需安装任何依赖——本仓库没有应用代码，只有 Markdown 指令体系、YAML 配置与数据表，AI CLI 本身就是运行时。
+无需安装任何依赖即可使用全部功能——本仓库没有应用代码，只有 Markdown 指令体系、YAML 配置与数据表，AI CLI 本身就是运行时。唯一可选的安装是终端仪表盘：`npm install` 后运行 `npm run dashboard`（Ink TUI：清单表格/进度漏斗/分数分布/Top 房源，`r` 刷新 `q` 退出；管道环境下自动降级为单帧纯文本）。
 
 ## 目录结构
 
@@ -62,7 +62,8 @@ house-ops/
 ├── templates/states.yml                # 购房状态机
 ├── templates/policy-notes.cn.yml       # 中国政策数据表（限购/税费/贷款/学区/商办/法拍，带 as_of）
 ├── templates/contract-checklist.cn.yml # 交易合同 13 条走查清单
-├── scripts/*.mjs        # 确定性脚本：报告编号原子分配 / doctor / stats（零依赖，Node ≥18）
+├── scripts/*.mjs        # 确定性脚本：编号原子分配 / doctor / stats / Ink TUI dashboard
+├── scripts/lib/data.mjs # stats 与 dashboard 共享的数据解析层
 ├── data/                  # watchlist.md、notes/ 带看记录（gitignore）
 └── reports/               # 评估报告（gitignore）
 ```
