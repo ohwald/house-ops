@@ -203,6 +203,10 @@ export function renderMapHtml({ initialData, config = {} }) {
       background: #090d16;
       z-index: 1;
     }
+    /* 高德免 Key 暗黑科技风滤镜 (国内直连、秒开且保持全部建筑与路网细节) */
+    .map-tiles-dark .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(92%);
+    }
 
     /* 侧边筛选与图层控制面板 */
     .filter-panel {
@@ -768,11 +772,12 @@ export function renderMapHtml({ initialData, config = {} }) {
     </div>
 
     <div class="header-actions">
-      <!-- 底图切换下拉 -->
+      <!-- 底图切换下拉 (国内高速免Key直连，支持建筑小区细化与实景卫星) -->
       <select class="basemap-select" id="select-basemap" onchange="switchBasemap(this.value)">
-        <option value="amap">高德中文底图 (免Key)</option>
-        <option value="carto_dark">Carto 极简深色 (免Key)</option>
-        <option value="osm">OpenStreetMap (免Key)</option>
+        <option value="amap_dark">高德极简暗黑 (推荐·秒开)</option>
+        <option value="amap_vector">高德街道详图 (含建筑小区)</option>
+        <option value="amap_satellite">高德卫星实景 (航拍+路网)</option>
+        <option value="geoq_dark">智图极简灰蓝 (免Key)</option>
       </select>
 
       <button class="btn" id="btn-toggle-demo" onclick="toggleDemoData()">
@@ -1080,28 +1085,48 @@ export function renderMapHtml({ initialData, config = {} }) {
     let selectedCompareNos = [];
     let currentSelectedHouse = null;
 
-    // 免 Key 底图配置
+    // 免 Key 高性能国内底图配置 (国内直连不卡顿，自动细化到街道/建筑级)
     const TILE_CONFIGS = {
-      amap: {
-        url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        subdomains: ['1', '2', '3', '4'],
-        maxZoom: 18,
+      amap_dark: {
+        name: '高德极简暗黑 (推荐·秒开)',
+        url: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7',
+        subdomains: '1234',
+        maxZoom: 19,
+        maxNativeZoom: 18,
+        darkFilter: true,
         attribution: '© 高德地图 AutoNavi'
       },
-      carto_dark: {
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        subdomains: 'abcd',
+      amap_vector: {
+        name: '高德街道详图 (含建筑小区)',
+        url: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7',
+        subdomains: '1234',
         maxZoom: 19,
-        attribution: '© CartoDB'
+        maxNativeZoom: 18,
+        darkFilter: false,
+        attribution: '© 高德地图 AutoNavi'
       },
-      osm: {
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        subdomains: 'abc',
+      amap_satellite: {
+        name: '高德卫星实景 (航拍+路网)',
+        url: 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        overlayUrl: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=8',
+        subdomains: '1234',
         maxZoom: 19,
-        attribution: '© OpenStreetMap'
+        maxNativeZoom: 18,
+        darkFilter: false,
+        attribution: '© 高德地图 AutoNavi 航拍影像'
+      },
+      geoq_dark: {
+        name: '智图极简灰蓝 (免Key)',
+        url: 'https://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineStreetPurplishBlue/MapServer/tile/{z}/{y}/{x}',
+        subdomains: '',
+        maxZoom: 18,
+        maxNativeZoom: 16,
+        darkFilter: false,
+        attribution: '© GeoQ 智图'
       }
     };
     let currentTileLayer = null;
+    let currentOverlayLayer = null;
 
     // 演示样例数据（深度融入政策、历史成交走势、规划分析与事实甄别）
     const DEMO_HOUSES = [
@@ -1252,14 +1277,16 @@ export function renderMapHtml({ initialData, config = {} }) {
       leafletMap = L.map('map-root', {
         center: [31.248, 121.585],
         zoom: 12,
+        minZoom: 3,
+        maxZoom: 19,
         zoomControl: false,
       });
 
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
       L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(leafletMap);
 
-      // 加载默认高德免 Key 底图
-      switchBasemap('amap');
+      // 加载默认高德极简暗黑底图 (既契合大屏科技风格，又是免Key直连完整矢量)
+      switchBasemap('amap_dark');
 
       markersLayerGroup = L.layerGroup().addTo(leafletMap);
       planningLayerGroup = L.layerGroup().addTo(leafletMap);
@@ -1267,20 +1294,61 @@ export function renderMapHtml({ initialData, config = {} }) {
       setupWorkAnchor();
       setupUrbanPlanningOverlays();
       refreshMapMarkers();
+
+      // 解决 Flexbox 布局下初始化与缩放视口计算偏移，确保切片全幅自动加载
+      setTimeout(() => {
+        if (leafletMap) leafletMap.invalidateSize();
+      }, 150);
+      window.addEventListener('resize', () => {
+        if (leafletMap) leafletMap.invalidateSize();
+      });
     }
 
-    // 底图无缝切换 (全部免 Key)
+    // 底图无缝切换 (全部免 Key，国内高速直连，自动按缩放层级拉取精细切片)
     function switchBasemap(type) {
       if (!leafletMap) return;
-      const conf = TILE_CONFIGS[type] || TILE_CONFIGS.amap;
+      const conf = TILE_CONFIGS[type] || TILE_CONFIGS.amap_dark;
+
+      // 切换深色模式硬件加速滤镜
+      const mapEl = document.getElementById('map-root');
+      if (mapEl) {
+        mapEl.classList.toggle('map-tiles-dark', Boolean(conf.darkFilter));
+      }
+
+      // 清理原瓦片层
       if (currentTileLayer) {
         leafletMap.removeLayer(currentTileLayer);
+        currentTileLayer = null;
       }
+      if (currentOverlayLayer) {
+        leafletMap.removeLayer(currentOverlayLayer);
+        currentOverlayLayer = null;
+      }
+
+      // 创建主瓦片层 (配置 maxNativeZoom 确保缩放到极致时平滑过渡，不白屏)
       currentTileLayer = L.tileLayer(conf.url, {
-        subdomains: conf.subdomains,
-        maxZoom: conf.maxZoom,
+        subdomains: conf.subdomains || '1234',
+        minZoom: 3,
+        maxZoom: conf.maxZoom || 19,
+        maxNativeZoom: conf.maxNativeZoom || 18,
+        updateWhenZooming: false,
+        updateInterval: 80,
+        keepBuffer: 3,
         attribution: conf.attribution,
       }).addTo(leafletMap);
+
+      // 若有叠加注记层 (如卫星航拍图 + 道路注记)
+      if (conf.overlayUrl) {
+        currentOverlayLayer = L.tileLayer(conf.overlayUrl, {
+          subdomains: conf.subdomains || '1234',
+          minZoom: 3,
+          maxZoom: conf.maxZoom || 19,
+          maxNativeZoom: conf.maxNativeZoom || 18,
+          updateWhenZooming: false,
+          updateInterval: 80,
+          keepBuffer: 3,
+        }).addTo(leafletMap);
+      }
     }
 
     // 切换演示数据
