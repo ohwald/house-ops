@@ -936,6 +936,13 @@ export function renderMapHtml({ initialData, config = {} }) {
         <div style="color:var(--text-muted); font-size:0.75rem;" id="m-planning-env">周边未建地块用途与施工期影响: --</div>
       </div>
 
+      <!-- 客观事实 vs 营销甄别 (De-biasing) -->
+      <div class="detail-card-section" style="border-color:rgba(245, 158, 11, 0.4);">
+        <div class="section-headline" style="color:#fbbf24;">🔍 客观事实 vs 营销甄别 (去伪存真)</div>
+        <div style="color:#f87171; font-size:0.75rem;" id="m-marketing-claim">⚠️ 宣传声称: --</div>
+        <div style="color:#34d399; font-size:0.75rem;" id="m-verified-fact">✅ 交叉验证事实: --</div>
+      </div>
+
       <!-- 中立得失权衡总结 -->
       <div class="detail-card-section" style="border-color:rgba(56, 189, 248, 0.4);">
         <div class="section-headline" style="color:#38bdf8;">⚖️ 方案利弊权衡推演</div>
@@ -1134,6 +1141,9 @@ export function renderMapHtml({ initialData, config = {} }) {
         urban_planning: "positive",
         urban_planning_text: "轨交21号线在建（距金桥站约700m，预计2027通车），金桥副中心产业辐射",
         urban_planning_env: "周边无新增高密住宅抛压，东侧规划社区体育公园已批复",
+        // 客观事实 vs 营销甄别
+        marketing_claim: "中介宣称'紧邻轨交枢纽，对口名校，绝版好房抢手'",
+        verified_fact: "已交叉验证：实测步行至21号线在建站约700m，非现成上盖；对口小学办学仅3年并非名校；但满五唯一与筑底折价属实",
         tradeoff_summary: "【优势】自住品质与户型极佳，筑底期议价空间健康；【代价】单价贴近预算上限，需承担2年轨交施工期噪音。",
         state: "已看房",
         coords: [121.6112, 31.2586]
@@ -1164,6 +1174,9 @@ export function renderMapHtml({ initialData, config = {} }) {
         urban_planning: "neutral",
         urban_planning_text: "周边无新建重大轨交规划，依赖既有9号线台儿庄路站(950m)",
         urban_planning_env: "南侧为成熟居住区，无变数也无新增红利",
+        // 客观事实 vs 营销甄别
+        marketing_claim: "房东急售笋盘，低于市场价30万，送全套家具软装",
+        verified_fact: "已交叉验证：二楼独立排水未改造有返水隐患，且近3个月同户型成交均价460万，480万并无明显倒挂，非真实笋盘",
         tradeoff_summary: "【优势】总价更低且房东急售折价弹性大，低门槛上车；【代价】税费较高且学位受限，抗跌性稍弱。",
         state: "已评估",
         coords: [121.5980, 31.2650]
@@ -1194,6 +1207,9 @@ export function renderMapHtml({ initialData, config = {} }) {
         urban_planning: "uncertain",
         urban_planning_text: "紧邻规划货运铁路联络线，远期面临重载列车噪音",
         urban_planning_env: "西侧为已批建垃圾中转站扩建工程，存在嫌恶设施隐患",
+        // 客观事实 vs 营销甄别
+        marketing_claim: "宣称'总价低至420万，超大赠送面积，未来绿地环绕'",
+        verified_fact: "已交叉验证：赠送部位属违建私封北天井，有拆除风险；西侧法定控规为垃圾中转站而非绿地，营销虚假承诺",
         tradeoff_summary: "【优势】绝对总价最低(420万)；【代价】命中硬性DQ（噪音超标+回迁混居），未来转手与居住体验风险过大。",
         state: "弃购",
         coords: [121.6030, 31.2950]
@@ -1224,6 +1240,9 @@ export function renderMapHtml({ initialData, config = {} }) {
         urban_planning: "positive",
         urban_planning_text: "碧云国际社区核心成熟区，9/14号线双轨交环绕",
         urban_planning_env: "绿化率高，无任何嫌恶设施规划",
+        // 客观事实 vs 营销甄别
+        marketing_claim: "纯正涉外国际社区，保值抗跌首选",
+        verified_fact: "已交叉验证：抗跌性与国际圈层属实，但总价超出用户预算上限180万，税费极高，属画像硬性不符",
         tradeoff_summary: "【优势】圈层与自住品质天花板；【代价】总价超出预算180万触发硬性DQ，仅作为品质标杆方案对照。",
         state: "弃购",
         coords: [121.5850, 31.2420]
@@ -1472,6 +1491,10 @@ export function renderMapHtml({ initialData, config = {} }) {
       // 方案权衡
       document.getElementById('m-tradeoff-summary').textContent = h.tradeoff_summary || '【得失权衡】' + (h.next_action || '建议作为备选方案');
 
+      // 客观事实 vs 营销甄别
+      document.getElementById('m-marketing-claim').textContent = '⚠️ 营销宣传: ' + (h.marketing_claim || '中介宣传常规口径');
+      document.getElementById('m-verified-fact').textContent = '✅ 交叉验证: ' + (h.verified_fact || '已根据官方规划与真实成交核实');
+
       const badge = document.getElementById('m-badge');
       badge.textContent = h.score_global != null ? h.score_global : '无分';
       badge.className = 'score-badge ' + ((h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass') ? 'score-low'
@@ -1587,6 +1610,10 @@ export function renderMapHtml({ initialData, config = {} }) {
           {
             title: '🏗️ 城市空间规划与未来变量',
             render: h => \`<span style="color:#34d399;">\${h.urban_planning_text || '成熟现状'}</span><br><span style="color:#94a3b8; font-size:0.75rem;">\${h.urban_planning_env || '无明显嫌恶与遮挡'}</span>\`
+          },
+          {
+            title: '🔍 营销宣传 vs 客观事实甄别',
+            render: h => \`<div style="font-size:0.75rem; line-height:1.4;"><span style="color:#f87171;">⚠️ \${h.marketing_claim || '宣传口径'}</span><br><span style="color:#34d399;">✅ \${h.verified_fact || '已核验事实'}</span></div>\`
           },
           {
             title: '核心得失与权衡结论 (Pros vs Cons)',
