@@ -1,5 +1,5 @@
 // lib/map-html.mjs — 生成自包含的交互式地图 HTML 页面
-// 规范：零外部 npm 依赖，包含现代 CSS、AMap 2.0 地图逻辑与响应式交互面板。
+// 规范：零外部 npm 依赖，深度融入当地政策解读、历史成交走势、城市规划分析与多方案对比推演。
 
 export function renderMapHtml({ initialData, config = {} }) {
   const jsonString = JSON.stringify(initialData).replace(/</g, '\\u003c');
@@ -10,13 +10,15 @@ export function renderMapHtml({ initialData, config = {} }) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>house-ops 房源决策地图</title>
+  <title>house-ops 房源决策地图 — 多方案对比与规划/政策推演</title>
   <style>
     :root {
-      --bg-primary: #0f172a;
-      --bg-surface: #1e293b;
-      --bg-surface-hover: #334155;
-      --border-color: #334155;
+      --bg-primary: #0b0f19;
+      --bg-surface: #151e2e;
+      --bg-surface-elevated: #1e293b;
+      --bg-surface-hover: #273549;
+      --border-color: #2b3b52;
+      --border-color-light: #3b4d66;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --brand: #38bdf8;
@@ -24,8 +26,9 @@ export function renderMapHtml({ initialData, config = {} }) {
       --green: #10b981;
       --yellow: #f59e0b;
       --red: #ef4444;
+      --purple: #a855f7;
       --gray: #64748b;
-      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -42,14 +45,14 @@ export function renderMapHtml({ initialData, config = {} }) {
 
     /* 顶部导航 */
     header {
-      height: 56px;
-      background: rgba(15, 23, 42, 0.92);
-      backdrop-filter: blur(12px);
+      height: 60px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 18px;
       z-index: 100;
       flex-shrink: 0;
     }
@@ -67,19 +70,51 @@ export function renderMapHtml({ initialData, config = {} }) {
       letter-spacing: -0.5px;
     }
     .brand-badge {
-      font-size: 0.75rem;
-      background: #334155;
+      font-size: 0.72rem;
+      background: #1e293b;
+      border: 1px solid var(--border-color);
       color: #94a3b8;
       padding: 2px 8px;
       border-radius: 999px;
       font-weight: 500;
     }
 
+    /* 地图标注视角切换 */
+    .view-mode-bar {
+      display: flex;
+      align-items: center;
+      background: rgba(11, 15, 25, 0.7);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 4px;
+    }
+    .view-mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .view-mode-btn:hover { color: #fff; }
+    .view-mode-btn.active {
+      background: #1e293b;
+      color: #38bdf8;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+
     .header-stats {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       align-items: center;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
     }
     .stat-pill {
       display: flex;
@@ -113,7 +148,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       border: 1px solid var(--border-color);
       padding: 6px 12px;
       border-radius: 6px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -131,8 +166,8 @@ export function renderMapHtml({ initialData, config = {} }) {
       font-weight: 600;
     }
     button.btn-primary:hover {
-      opacity: 0.92;
-      box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
+      opacity: 0.94;
+      box-shadow: 0 0 14px rgba(37, 99, 235, 0.5);
     }
 
     /* 主容器 */
@@ -151,14 +186,14 @@ export function renderMapHtml({ initialData, config = {} }) {
       background: #090d16;
     }
 
-    /* 侧边筛选浮窗面板 */
+    /* 侧边筛选与图层控制面板 */
     .filter-panel {
       position: absolute;
       top: 16px;
       left: 16px;
-      width: 320px;
+      width: 330px;
       max-height: calc(100% - 32px);
-      background: rgba(30, 41, 59, 0.92);
+      background: rgba(21, 30, 46, 0.94);
       backdrop-filter: blur(16px);
       border: 1px solid var(--border-color);
       border-radius: 12px;
@@ -169,14 +204,14 @@ export function renderMapHtml({ initialData, config = {} }) {
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .filter-panel.collapsed {
-      transform: translateX(-340px);
+      transform: translateX(-350px);
     }
     .panel-toggle-btn {
       position: absolute;
       top: 16px;
       left: 16px;
       z-index: 19;
-      background: rgba(30, 41, 59, 0.9);
+      background: rgba(21, 30, 46, 0.92);
       border: 1px solid var(--border-color);
       color: #fff;
       border-radius: 8px;
@@ -184,6 +219,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       cursor: pointer;
       backdrop-filter: blur(8px);
       box-shadow: var(--shadow);
+      font-size: 0.85rem;
     }
 
     .panel-header {
@@ -193,7 +229,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       justify-content: space-between;
       align-items: center;
     }
-    .panel-title { font-size: 0.95rem; font-weight: 700; color: #f1f5f9; }
+    .panel-title { font-size: 0.95rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; }
     .panel-body {
       padding: 14px 16px;
       overflow-y: auto;
@@ -211,7 +247,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     .filter-label {
       font-weight: 600;
       color: var(--text-muted);
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       display: flex;
@@ -226,7 +262,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     }
     .range-inputs input[type="number"] {
       width: 100%;
-      background: #0f172a;
+      background: #0b0f19;
       border: 1px solid var(--border-color);
       border-radius: 6px;
       color: #fff;
@@ -240,16 +276,19 @@ export function renderMapHtml({ initialData, config = {} }) {
       align-items: center;
       cursor: pointer;
       user-select: none;
+      padding: 3px 0;
     }
     .switch-box {
       width: 36px;
       height: 20px;
-      background: #475569;
+      background: #334155;
       border-radius: 10px;
       position: relative;
       transition: background 0.2s;
+      flex-shrink: 0;
     }
     .switch-box.active { background: var(--brand); }
+    .switch-box.active-purple { background: var(--purple); }
     .switch-dot {
       width: 16px;
       height: 16px;
@@ -260,7 +299,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       left: 2px;
       transition: transform 0.2s;
     }
-    .switch-box.active .switch-dot {
+    .switch-box.active .switch-dot, .switch-box.active-purple .switch-dot {
       transform: translateX(16px);
     }
 
@@ -273,7 +312,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     .chip {
       padding: 4px 8px;
       border-radius: 6px;
-      background: #0f172a;
+      background: #0b0f19;
       border: 1px solid var(--border-color);
       color: var(--text-muted);
       cursor: pointer;
@@ -287,157 +326,211 @@ export function renderMapHtml({ initialData, config = {} }) {
       background: rgba(56, 189, 248, 0.15);
     }
 
-    /* 房源列表卡片（底部/侧边小清单） */
+    /* 房源列表卡片 */
     .house-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
       margin-top: 4px;
-      max-height: 220px;
+      max-height: 230px;
       overflow-y: auto;
       padding-right: 4px;
     }
     .house-item {
-      background: #0f172a;
+      background: #0b0f19;
       border: 1px solid var(--border-color);
       border-radius: 8px;
       padding: 8px 10px;
-      cursor: pointer;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      gap: 6px;
+      cursor: pointer;
       transition: border-color 0.2s;
     }
     .house-item:hover, .house-item.selected {
       border-color: var(--brand);
-      background: #131d31;
+      background: #101726;
+    }
+    .house-item-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     .house-item-title { font-weight: 600; font-size: 0.85rem; color: #f1f5f9; }
-    .house-item-sub { font-size: 0.75rem; color: var(--text-muted); }
+    .house-item-sub { font-size: 0.74rem; color: var(--text-muted); }
+
+    .house-item-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 0.7rem;
+    }
+    .tag-badge {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(30, 41, 59, 0.8);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .tag-policy { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border-color: rgba(168, 85, 247, 0.3); }
+    .tag-trend { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.3); }
+    .tag-planning { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+
     .score-badge {
       font-weight: 700;
       font-size: 0.8rem;
       padding: 2px 6px;
       border-radius: 4px;
+      white-space: nowrap;
     }
     .score-high { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
     .score-mid { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
     .score-low { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); text-decoration: line-through; }
 
-    /* 右侧需求配置抽屉 (Profile Drawer) */
-    .drawer-mask {
+    /* 底部对比方案栏 (Compare Tray) */
+    .compare-tray {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(21, 30, 46, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--brand);
+      border-radius: 12px;
+      padding: 10px 18px;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      box-shadow: var(--shadow);
+      z-index: 80;
+      animation: slideUp 0.2s ease-out;
+    }
+    .compare-tray.show { display: flex; }
+    .compare-chips { display: flex; gap: 8px; }
+    .compare-chip {
+      background: #0b0f19;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.78rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .compare-chip-del { cursor: pointer; color: var(--text-muted); font-weight: bold; }
+    .compare-chip-del:hover { color: var(--red); }
+
+    /* 多方案横向对比全屏模态弹窗 (Compare Matrix Modal) */
+    .compare-modal-mask {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(4px);
-      z-index: 150;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 180;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
     }
-    .drawer-mask.open { opacity: 1; pointer-events: auto; }
-
-    .drawer {
-      position: fixed;
-      top: 0;
-      right: 0;
-      width: 460px;
-      max-width: 90vw;
-      height: 100vh;
+    .compare-modal-mask.open { display: flex; }
+    .compare-modal-content {
+      width: 1100px;
+      max-width: 95vw;
+      max-height: 90vh;
       background: var(--bg-surface);
-      border-left: 1px solid var(--border-color);
-      z-index: 160;
-      transform: translateX(100%);
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid var(--border-color-light);
+      border-radius: 16px;
       display: flex;
       flex-direction: column;
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.7);
+      box-shadow: var(--shadow);
+      overflow: hidden;
     }
-    .drawer.open { transform: translateX(0); }
-
-    .drawer-header {
-      padding: 18px 20px;
+    .compare-modal-header {
+      padding: 16px 24px;
       border-bottom: 1px solid var(--border-color);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      background: #101726;
     }
-    .drawer-title { font-size: 1.1rem; font-weight: 700; color: #fff; }
-    .drawer-body {
-      padding: 20px;
+    .compare-modal-body {
+      padding: 24px;
       overflow-y: auto;
       flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      font-size: 0.88rem;
     }
-    .drawer-footer {
-      padding: 16px 20px;
-      border-top: 1px solid var(--border-color);
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      background: #172033;
+    .compare-matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
     }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .form-label {
-      font-weight: 600;
-      color: #cbd5e1;
-      font-size: 0.82rem;
-    }
-    .form-help {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-    .form-input {
-      background: #0f172a;
+    .compare-matrix-table th, .compare-matrix-table td {
       border: 1px solid var(--border-color);
-      border-radius: 6px;
-      color: #fff;
-      padding: 8px 12px;
-      font-size: 0.88rem;
-      transition: border-color 0.2s;
-    }
-    .form-input:focus {
-      outline: none;
-      border-color: var(--brand);
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-    }
-    textarea.form-input {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.8rem;
+      padding: 12px 14px;
+      vertical-align: top;
       line-height: 1.5;
-      resize: vertical;
+    }
+    .compare-matrix-table th {
+      background: #0f172a;
+      color: #94a3b8;
+      font-weight: 600;
+      text-align: left;
+      width: 180px;
+    }
+    .compare-matrix-table td {
+      background: rgba(15, 23, 42, 0.5);
+      color: #e2e8f0;
+    }
+    .compare-matrix-table td.highlight-col {
+      background: rgba(56, 189, 248, 0.04);
+      border-left: 2px solid var(--brand);
+      border-right: 2px solid var(--brand);
     }
 
-    /* 浮动报告详情弹窗 (Modal / Bottom Sheet) */
+    /* 右下角房源深度详情弹窗 */
     .report-modal {
       position: fixed;
       bottom: 24px;
       right: 24px;
-      width: 380px;
-      background: rgba(30, 41, 59, 0.95);
-      backdrop-filter: blur(16px);
+      width: 420px;
+      max-width: 92vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: rgba(21, 30, 46, 0.96);
+      backdrop-filter: blur(20px);
       border: 1px solid var(--brand);
       border-radius: 14px;
       box-shadow: var(--shadow);
       z-index: 90;
-      padding: 16px;
+      padding: 18px;
       display: none;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
       animation: slideUp 0.25s ease-out;
     }
     .report-modal.show { display: flex; }
     @keyframes slideUp {
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
+    }
+
+    .detail-card-section {
+      background: #0b0f19;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .section-headline {
+      font-weight: 700;
+      font-size: 0.78rem;
+      color: var(--brand);
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     /* 地图自定义 Marker 样式 */
@@ -449,9 +542,9 @@ export function renderMapHtml({ initialData, config = {} }) {
       padding: 4px 10px;
       border-radius: 20px;
       font-weight: bold;
-      font-size: 12px;
+      font-size: 11px;
       white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
       transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     .map-marker:hover {
@@ -474,12 +567,114 @@ export function renderMapHtml({ initialData, config = {} }) {
       border: 2px solid #fde68a;
     }
     .map-marker.low {
-      background: #475569;
-      color: #cbd5e1;
-      border: 1px solid #64748b;
-      opacity: 0.7;
+      background: #334155;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      opacity: 0.75;
     }
     .map-marker.low:hover { opacity: 1; }
+
+    /* 规划与地块 Marker */
+    .map-marker-planning {
+      background: rgba(168, 85, 247, 0.9);
+      color: #fff;
+      border: 1px dashed #e9d5ff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* 右侧需求配置抽屉 (Profile Drawer) */
+    .drawer-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 150;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .drawer-mask.open { opacity: 1; pointer-events: auto; }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 480px;
+      max-width: 90vw;
+      height: 100vh;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-color);
+      z-index: 160;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.7);
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .drawer-title { font-size: 1.05rem; font-weight: 700; color: #fff; }
+    .drawer-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      font-size: 0.88rem;
+    }
+    .drawer-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      background: #101726;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-label {
+      font-weight: 600;
+      color: #cbd5e1;
+      font-size: 0.82rem;
+    }
+    .form-help {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+    .form-input {
+      background: #0b0f19;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: #fff;
+      padding: 8px 12px;
+      font-size: 0.88rem;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    textarea.form-input {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      resize: vertical;
+    }
 
     /* 高德地图配置引导弹窗 */
     .key-dialog {
@@ -533,7 +728,23 @@ export function renderMapHtml({ initialData, config = {} }) {
   <header>
     <div class="brand-box">
       <div class="brand-logo">house-ops</div>
-      <div class="brand-badge">决策地图</div>
+      <div class="brand-badge">决策沙盘</div>
+    </div>
+
+    <!-- 地图 Marker 视角切换（综合 / 价格走势 / 政策税费 / 城市规划） -->
+    <div class="view-mode-bar">
+      <button class="view-mode-btn active" id="btn-vm-score" onclick="setMarkerViewMode('score')">
+        <span>⭐ 综合评级</span>
+      </button>
+      <button class="view-mode-btn" id="btn-vm-trend" onclick="setMarkerViewMode('trend')">
+        <span>📉 历史走势&折价</span>
+      </button>
+      <button class="view-mode-btn" id="btn-vm-policy" onclick="setMarkerViewMode('policy')">
+        <span>🏛️ 政策税费精算</span>
+      </button>
+      <button class="view-mode-btn" id="btn-vm-planning" onclick="setMarkerViewMode('planning')">
+        <span>🏗️ 规划兑现与变数</span>
+      </button>
     </div>
 
     <div class="header-stats">
@@ -543,17 +754,17 @@ export function renderMapHtml({ initialData, config = {} }) {
       </div>
       <div class="stat-pill" id="pill-rec" onclick="setDecisionFilter('rec')">
         <div class="stat-dot dot-green"></div>
-        <span>建议看</span>
+        <span>第一梯队</span>
         <strong id="stat-rec" style="color:#34d399">0</strong>
       </div>
       <div class="stat-pill" id="pill-cond" onclick="setDecisionFilter('cond')">
         <div class="stat-dot dot-yellow"></div>
-        <span>待定</span>
+        <span>备选对照</span>
         <strong id="stat-cond" style="color:#fbbf24">0</strong>
       </div>
       <div class="stat-pill" id="pill-pass" onclick="setDecisionFilter('pass')">
         <div class="stat-dot dot-red"></div>
-        <span>不建议</span>
+        <span>高代价/硬伤</span>
         <strong id="stat-pass" style="color:#94a3b8">0</strong>
       </div>
     </div>
@@ -577,21 +788,31 @@ export function renderMapHtml({ initialData, config = {} }) {
 
     <!-- 折叠展开按钮 -->
     <button class="panel-toggle-btn" id="btn-toggle-panel" onclick="toggleFilterPanel()" style="display:none;">
-      ☰ 筛选房源
+      ☰ 方案筛选与图层
     </button>
 
     <!-- 左侧浮动筛选面板 -->
     <div class="filter-panel" id="filter-panel">
       <div class="panel-header">
-        <div class="panel-title">🎯 房源筛选与图层</div>
+        <div class="panel-title">🎯 方案过滤与专业图层</div>
         <button class="btn" style="padding:2px 8px; font-size:0.75rem;" onclick="toggleFilterPanel()">收起</button>
       </div>
       <div class="panel-body">
-        <!-- 快速开关 -->
+        <!-- 规划图层开关 -->
+        <div class="switch-row" onclick="togglePlanningLayer()">
+          <div>
+            <div style="font-weight:600;">规划线网与产业图层</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">规划轨交线、产业极核与未建地块</div>
+          </div>
+          <div class="switch-box active-purple" id="switch-planning-box">
+            <div class="switch-dot"></div>
+          </div>
+        </div>
+
         <div class="switch-row" onclick="toggleExcludeRejected()">
           <div>
-            <div style="font-weight:600;">只看建议房源</div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">自动隐藏不建议/淘汰/已弃购</div>
+            <div style="font-weight:600;">隐藏高代价/硬伤房源</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">过滤硬性DQ或严重溢价项</div>
           </div>
           <div class="switch-box" id="switch-exclude-box">
             <div class="switch-dot"></div>
@@ -600,8 +821,8 @@ export function renderMapHtml({ initialData, config = {} }) {
 
         <div class="switch-row" onclick="toggleIsochrone()">
           <div>
-            <div style="font-weight:600;">工作地通勤范围</div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">绘制通勤辐射圈</div>
+            <div style="font-weight:600;">工作地通勤圈</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">以人民广场为锚点的辐射范围</div>
           </div>
           <div class="switch-box active" id="switch-commute-box">
             <div class="switch-dot"></div>
@@ -636,18 +857,19 @@ export function renderMapHtml({ initialData, config = {} }) {
 
         <!-- 最低评分门槛 -->
         <div class="filter-group">
-          <div class="filter-label">最低 Global 分数</div>
+          <div class="filter-label">最低 Global 门槛</div>
           <div class="chip-container" id="score-chips">
             <div class="chip active" onclick="setScoreFloor(0)">全部</div>
-            <div class="chip" onclick="setScoreFloor(3.5)">≥ 3.5 (及格)</div>
-            <div class="chip" onclick="setScoreFloor(4.0)">≥ 4.0 (深挖优选)</div>
+            <div class="chip" onclick="setScoreFloor(3.5)">≥ 3.5 (及格基准)</div>
+            <div class="chip" onclick="setScoreFloor(4.0)">≥ 4.0 (第一梯队)</div>
           </div>
         </div>
 
-        <!-- 当前符合条件的房源列表 -->
+        <!-- 当前符合条件的房源列表（带勾选加入对比） -->
         <div class="filter-group">
           <div class="filter-label">
-            <span>列表 (<span id="count-visible">0</span>)</span>
+            <span>房源方案 (<span id="count-visible">0</span>)</span>
+            <span style="font-size:0.7rem; color:var(--brand); cursor:pointer;" onclick="openCompareModal()">多方案横向对比</span>
           </div>
           <div class="house-list" id="house-list-container">
             <!-- 动态填充 -->
@@ -656,20 +878,31 @@ export function renderMapHtml({ initialData, config = {} }) {
       </div>
     </div>
 
+    <!-- 底部已选方案对比托盘 (Compare Tray) -->
+    <div class="compare-tray" id="compare-tray">
+      <div style="font-size:0.82rem; font-weight:700; color:#fff;">已选对比方案 (<span id="compare-count">0</span>/4):</div>
+      <div class="compare-chips" id="compare-chips"></div>
+      <button class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem;" onclick="openCompareModal()">
+        ⚖️ 查看方案权衡矩阵
+      </button>
+      <button class="btn" style="padding:4px 8px; font-size:0.75rem;" onclick="clearCompareSelection()">清空</button>
+    </div>
+
     <!-- 右下角选中的房源详情卡片 -->
     <div class="report-modal" id="report-modal">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
           <span style="font-size:0.75rem; color:var(--brand); font-weight:700;" id="m-no">#001</span>
-          <h3 style="font-size:1.05rem; font-weight:700; color:#fff;" id="m-title">小区名</h3>
+          <h3 style="font-size:1.1rem; font-weight:700; color:#fff;" id="m-title">小区名</h3>
           <div style="font-size:0.78rem; color:var(--text-muted);" id="m-sub">城市 · 板块 · 户型</div>
         </div>
         <div id="m-badge" class="score-badge score-high">4.2</div>
       </div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; background:#0f172a; padding:8px; border-radius:8px; text-align:center;">
+      <!-- 核心数字 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; background:#0b0f19; padding:8px; border-radius:8px; text-align:center;">
         <div>
-          <div style="font-size:0.72rem; color:var(--text-muted);">总价</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">挂牌总价</div>
           <div style="font-weight:700; color:#f8fafc;" id="m-price">-- 万</div>
         </div>
         <div>
@@ -682,14 +915,51 @@ export function renderMapHtml({ initialData, config = {} }) {
         </div>
       </div>
 
-      <div style="font-size:0.8rem; line-height:1.4;">
-        <div style="color:#cbd5e1;"><strong style="color:var(--brand)">建议:</strong> <span id="m-action">--</span></div>
-        <div style="color:var(--text-muted); margin-top:4px;" id="m-unverified-box"></div>
+      <!-- 支柱一：政策解读与交易成本 -->
+      <div class="detail-card-section">
+        <div class="section-headline">🏛️ 当地政策解读与全口径税费</div>
+        <div style="color:#cbd5e1;" id="m-policy-tax">预估税费: -- 万</div>
+        <div style="color:var(--text-muted); font-size:0.75rem;" id="m-policy-lock">学位锁定: --</div>
       </div>
 
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
-        <button class="btn" style="padding:4px 10px; font-size:0.78rem;" onclick="closeReportModal()">关闭</button>
-        <button class="btn btn-primary" style="padding:4px 10px; font-size:0.78rem;" id="m-btn-view">查看完整报告</button>
+      <!-- 支柱二：历史成交与抗跌性走势 -->
+      <div class="detail-card-section">
+        <div class="section-headline">📉 历史成交走势与折价弹性</div>
+        <div style="color:#cbd5e1;" id="m-trend-cycle">周期状态: --</div>
+        <div style="color:var(--text-muted); font-size:0.75rem;" id="m-trend-discount">挂牌-成交折价空间: --</div>
+      </div>
+
+      <!-- 支柱三：城市规划与空间变量 -->
+      <div class="detail-card-section">
+        <div class="section-headline">🏗️ 城市空间规划与未来变量</div>
+        <div style="color:#cbd5e1;" id="m-planning-impact">规划兑现度: --</div>
+        <div style="color:var(--text-muted); font-size:0.75rem;" id="m-planning-env">周边未建地块用途与施工期影响: --</div>
+      </div>
+
+      <!-- 中立得失权衡总结 -->
+      <div class="detail-card-section" style="border-color:rgba(56, 189, 248, 0.4);">
+        <div class="section-headline" style="color:#38bdf8;">⚖️ 方案利弊权衡推演</div>
+        <div style="color:#e2e8f0; line-height:1.4;" id="m-tradeoff-summary">--</div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+        <button class="btn" id="m-btn-add-compare" onclick="toggleCurrentHouseCompare()">＋ 加入方案对比</button>
+        <button class="btn" onclick="closeReportModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 多方案横向对比全屏模态弹窗 (Compare Modal) -->
+  <div class="compare-modal-mask" id="compare-modal-mask" onclick="closeCompareModal(event)">
+    <div class="compare-modal-content" onclick="event.stopPropagation()">
+      <div class="compare-modal-header">
+        <div style="font-weight:700; font-size:1.1rem; color:#fff;">⚖️ 多方案横向对比与场景权衡推演</div>
+        <button class="btn" onclick="closeCompareModal()">✕ 关闭</button>
+      </div>
+      <div class="compare-modal-body">
+        <div id="compare-table-container">
+          <!-- 动态渲染对比矩阵 -->
+        </div>
       </div>
     </div>
   </div>
@@ -777,7 +1047,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     <div class="dialog-card">
       <h3 style="color:#fff; font-size:1.1rem;">⚙️ 配置高德地图 JS API Key</h3>
       <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
-        为了在地图上展示小区位置、行政区配套以及绘制通勤圈，请提供高德地图 <strong>Web端 (JS API)</strong> 的 Key 与安全密钥。<br>
+        为了在地图上展示小区位置、规划轨交图层以及绘制通勤圈，请提供高德地图 <strong>Web端 (JS API)</strong> 的 Key 与安全密钥。<br>
         密钥仅保存在本地浏览器或项目中，不外传。
       </p>
 
@@ -796,7 +1066,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       </div>
 
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
-        <button class="btn" onclick="closeKeyDialog()">暂不配置（仅看列表）</button>
+        <button class="btn" onclick="closeKeyDialog()">暂不配置（仅看方案矩阵）</button>
         <button class="btn btn-primary" onclick="saveAmapKeys()">保存并加载地图</button>
       </div>
     </div>
@@ -822,21 +1092,28 @@ export function renderMapHtml({ initialData, config = {} }) {
     let markers = [];
     let workMarker = null;
     let commuteCircle = null;
+    let planningOverlays = [];
 
-    let filterDecision = 'all'; // all | rec | cond | pass
+    let markerViewMode = 'score'; // score | trend | policy | planning
+    let filterDecision = 'all';   // all | rec | cond | pass
     let excludeRejected = false;
     let showCommuteRange = true;
+    let showPlanningLayer = true;
     let scoreFloor = 0;
     let isUsingDemo = false;
 
-    // 演示样例数据（当初始无报告时供用户体验）
+    // 对比方案清单（编号集合，最多 4 个）
+    let selectedCompareNos = [];
+    let currentSelectedHouse = null;
+
+    // 演示样例数据（深度融入政策、历史成交走势、规划分析）
     const DEMO_HOUSES = [
       {
         report_no: "001",
         community: "示范翠屏苑",
         city: "上海",
         district: "浦东金桥",
-        type: "二手",
+        type: "二手住宅",
         total_price_wan: 535,
         unit_price: 51200,
         area_sqm: 104.5,
@@ -844,8 +1121,20 @@ export function renderMapHtml({ initialData, config = {} }) {
         hard_dq_hit: false,
         risk_tier: "low",
         conclusion: "worth_viewing",
-        next_action: "安排周末带看，重点核实对口小学划片与外立面维护",
-        unverified_items: ["学区划片当年是否有变动", "地下车位配比"],
+        // 政策解读
+        policy_tax_wan: 8.5,
+        policy_lock_risk: "满五唯一，契税1.5%，无增值税，学位未占用（锁定风险低）",
+        // 历史成交走势
+        market_trend: "bottoming",
+        market_trend_text: "较2021高点回调24%，近半年成交均价筑底平稳",
+        discount_space: "normal",
+        discount_space_text: "同类户型实际成交相较挂牌折价 3-5% (议价约15-25万)",
+        liquidity_rating: "年均换手22套，平均去化65天，流动性良好",
+        // 城市规划
+        urban_planning: "positive",
+        urban_planning_text: "轨交21号线在建（距金桥站约700m，预计2027通车），金桥副中心产业辐射",
+        urban_planning_env: "周边无新增高密住宅抛压，东侧规划社区体育公园已批复",
+        tradeoff_summary: "【优势】自住品质与户型极佳，筑底期议价空间健康；【代价】单价贴近预算上限，需承担2年轨交施工期噪音。",
         state: "已看房",
         coords: [121.6112, 31.2586]
       },
@@ -854,7 +1143,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         community: "示范新城",
         city: "上海",
         district: "浦东金桥",
-        type: "二手",
+        type: "二手住宅",
         total_price_wan: 480,
         unit_price: 46000,
         area_sqm: 104.3,
@@ -862,8 +1151,20 @@ export function renderMapHtml({ initialData, config = {} }) {
         hard_dq_hit: false,
         risk_tier: "caution",
         conclusion: "conditional",
-        next_action: "次选待定，若价格能谈到 460 万以内可考虑",
-        unverified_items: ["顶楼渗水隐患", "户型暗卫通风"],
+        // 政策解读
+        policy_tax_wan: 15.2,
+        policy_lock_risk: "满二不唯一（个税核定2%），需多付约9.6万个税；学位五年一户已用2年",
+        // 历史成交走势
+        market_trend: "declining",
+        market_trend_text: "较峰值回调31%，近3个月仍有以价换量迹象",
+        discount_space: "wide",
+        discount_space_text: "在售库存多，挂牌折价弹性达 6-8% (可大胆砍价30万+)",
+        liquidity_rating: "挂牌周期长达110天，买方市场特征显著",
+        // 城市规划
+        urban_planning: "neutral",
+        urban_planning_text: "周边无新建重大轨交规划，依赖既有9号线台儿庄路站(950m)",
+        urban_planning_env: "南侧为成熟居住区，无变数也无新增红利",
+        tradeoff_summary: "【优势】总价更低且房东急售折价弹性大，低门槛上车；【代价】税费较高且学位受限，抗跌性稍弱。",
         state: "已评估",
         coords: [121.5980, 31.2650]
       },
@@ -872,7 +1173,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         community: "示范绿洲四期",
         city: "上海",
         district: "浦东高行",
-        type: "二手",
+        type: "动迁混居住宅",
         total_price_wan: 420,
         unit_price: 41000,
         area_sqm: 102.4,
@@ -880,8 +1181,20 @@ export function renderMapHtml({ initialData, config = {} }) {
         hard_dq_hit: true,
         risk_tier: "high",
         conclusion: "pass",
-        next_action: "明确放弃：靠近主干道噪音超标且属于回迁混居，命中硬性 DQ",
-        unverified_items: [],
+        // 政策解读
+        policy_tax_wan: 6.3,
+        policy_lock_risk: "动迁安置满三年，免增值税，税费负担轻",
+        // 历史成交走势
+        market_trend: "declining",
+        market_trend_text: "跑输大盘，受周边次新商品房挤压，流通性钝化",
+        discount_space: "wide",
+        discount_space_text: "议价弹性大但带看极冷清（近30天仅2次）",
+        liquidity_rating: "去化困难，属于潜在流动性陷阱",
+        // 城市规划
+        urban_planning: "uncertain",
+        urban_planning_text: "紧邻规划货运铁路联络线，远期面临重载列车噪音",
+        urban_planning_env: "西侧为已批建垃圾中转站扩建工程，存在嫌恶设施隐患",
+        tradeoff_summary: "【优势】绝对总价最低(420万)；【代价】命中硬性DQ（噪音超标+回迁混居），未来转手与居住体验风险过大。",
         state: "弃购",
         coords: [121.6030, 31.2950]
       },
@@ -890,7 +1203,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         community: "示范云园二期",
         city: "上海",
         district: "浦东碧云",
-        type: "二手",
+        type: "二手国际社区",
         total_price_wan: 780,
         unit_price: 68000,
         area_sqm: 115.0,
@@ -898,8 +1211,20 @@ export function renderMapHtml({ initialData, config = {} }) {
         hard_dq_hit: true,
         risk_tier: "low",
         conclusion: "pass",
-        next_action: "超出 600 万预算上限，品质极高但总价不匹配，仅作标杆参考",
-        unverified_items: [],
+        // 政策解读
+        policy_tax_wan: 19.5,
+        policy_lock_risk: "非普通住宅（单价超标），差额增值税与契税双高",
+        // 历史成交走势
+        market_trend: "bottoming",
+        market_trend_text: "板块极其抗跌，近2年仅微调8%，圈层与外籍承租需求稳固",
+        discount_space: "tight",
+        discount_space_text: "业主心态极强，折价空间通常仅 1-2%",
+        liquidity_rating: "优质房源放出一周内秒去化",
+        // 城市规划
+        urban_planning: "positive",
+        urban_planning_text: "碧云国际社区核心成熟区，9/14号线双轨交环绕",
+        urban_planning_env: "绿化率高，无任何嫌恶设施规划",
+        tradeoff_summary: "【优势】圈层与自住品质天花板；【代价】总价超出预算180万触发硬性DQ，仅作为品质标杆方案对照。",
         state: "弃购",
         coords: [121.5850, 31.2420]
       }
@@ -911,20 +1236,23 @@ export function renderMapHtml({ initialData, config = {} }) {
     });
 
     function initApp() {
-      // 检查是否有数据，若没有则引导或提示
       if (houses.length === 0) {
-        // 默认载入演示数据以展示效果
         isUsingDemo = true;
         houses = DEMO_HOUSES;
         document.getElementById('btn-toggle-demo').classList.add('btn-primary');
-        showToast('已加载演示样例数据（可在终端生成真实报告）', 3000);
+        showToast('已加载深度分析演示样例数据', 2500);
+      }
+
+      // 默认将前两套加入对比托盘
+      if (houses.length >= 2) {
+        selectedCompareNos = [houses[0].report_no, houses[1].report_no];
       }
 
       initProfileForm();
       updateStatsHeader();
+      updateCompareTray();
       renderHouseList();
 
-      // 启动高德地图
       setupAmap();
     }
 
@@ -935,14 +1263,24 @@ export function renderMapHtml({ initialData, config = {} }) {
       if (isUsingDemo) {
         houses = DEMO_HOUSES;
         btn.classList.add('btn-primary');
-        showToast('已切换为演示数据');
+        showToast('已载入演示数据（含政策、历史走势与规划）');
       } else {
         houses = INITIAL_DATA.reports || [];
         btn.classList.remove('btn-primary');
-        showToast(houses.length > 0 ? '已切回真实房源' : '当前暂无真实评估报告');
+        showToast(houses.length > 0 ? '已切回本地真实房源' : '当前暂无真实评估报告');
       }
       updateStatsHeader();
       applyFilters();
+      refreshMapMarkers();
+      updateCompareTray();
+    }
+
+    // 地图 Marker 展示视角切换
+    function setMarkerViewMode(mode) {
+      markerViewMode = mode;
+      ['score', 'trend', 'policy', 'planning'].forEach(k => {
+        document.getElementById('btn-vm-' + k).classList.toggle('active', k === mode);
+      });
       refreshMapMarkers();
     }
 
@@ -966,7 +1304,6 @@ export function renderMapHtml({ initialData, config = {} }) {
 
       document.getElementById('p-raw-yaml').value = rawYaml || '';
 
-      // 预填筛选输入框
       if (b.total_range_wan) {
         document.getElementById('filter-price-min').value = b.total_range_wan[0];
         document.getElementById('filter-price-max').value = b.total_range_wan[1];
@@ -977,7 +1314,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       }
     }
 
-    // 统计数字更新
     function updateStatsHeader() {
       let rec = 0, cond = 0, pass = 0;
       houses.forEach(h => {
@@ -995,7 +1331,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       document.getElementById('stat-pass').textContent = pass;
     }
 
-    // 切换建议等级筛选
     function setDecisionFilter(type) {
       filterDecision = type;
       ['all', 'rec', 'cond', 'pass'].forEach(k => {
@@ -1018,6 +1353,14 @@ export function renderMapHtml({ initialData, config = {} }) {
       }
     }
 
+    function togglePlanningLayer() {
+      showPlanningLayer = !showPlanningLayer;
+      document.getElementById('switch-planning-box').classList.toggle('active-purple', showPlanningLayer);
+      planningOverlays.forEach(o => {
+        o[showPlanningLayer ? 'show' : 'hide']();
+      });
+    }
+
     function setScoreFloor(score) {
       scoreFloor = score;
       const chips = document.getElementById('score-chips').children;
@@ -1027,7 +1370,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       applyFilters();
     }
 
-    // 筛选逻辑
     function getFilteredHouses() {
       const pMin = parseFloat(document.getElementById('filter-price-min').value) || null;
       const pMax = parseFloat(document.getElementById('filter-price-max').value) || null;
@@ -1039,22 +1381,17 @@ export function renderMapHtml({ initialData, config = {} }) {
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const isCond = !isRejected && !isRec;
 
-        // 决策分类筛选
         if (filterDecision === 'rec' && !isRec) return false;
         if (filterDecision === 'cond' && !isCond) return false;
         if (filterDecision === 'pass' && !isRejected) return false;
 
-        // 一键隐藏不建议
         if (excludeRejected && isRejected) return false;
 
-        // 分数下限
         if (scoreFloor > 0 && (h.score_global == null || h.score_global < scoreFloor)) return false;
 
-        // 价格区间
         if (pMin != null && h.total_price_wan != null && h.total_price_wan < pMin) return false;
         if (pMax != null && h.total_price_wan != null && h.total_price_wan > pMax) return false;
 
-        // 面积区间
         if (aMin != null && h.area_sqm != null && h.area_sqm < aMin) return false;
         if (aMax != null && h.area_sqm != null && h.area_sqm > aMax) return false;
 
@@ -1069,12 +1406,12 @@ export function renderMapHtml({ initialData, config = {} }) {
       refreshMapMarkers(filtered);
     }
 
-    // 渲染侧边房源列表
+    // 渲染房源方案列表
     function renderHouseList(list = getFilteredHouses()) {
       const container = document.getElementById('house-list-container');
       container.innerHTML = '';
       if (list.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; padding:16px;">无符合当前筛选条件的房源</div>';
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; padding:16px;">无符合当前筛选条件的方案</div>';
         return;
       }
 
@@ -1083,45 +1420,68 @@ export function renderMapHtml({ initialData, config = {} }) {
         item.className = 'house-item';
         item.onclick = () => selectHouse(h);
 
-        const scoreClass = (h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass') ? 'score-low'
-          : (h.score_global >= 4.0) ? 'score-high' : 'score-mid';
+        const isRejected = h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass';
+        const scoreClass = isRejected ? 'score-low' : (h.score_global >= 4.0) ? 'score-high' : 'score-mid';
+        const isSelectedCompare = selectedCompareNos.includes(h.report_no);
 
         item.innerHTML = \`
-          <div>
-            <div class="house-item-title">\${h.community || '房源 #' + h.report_no}</div>
-            <div class="house-item-sub">\${h.district || ''} · \${h.total_price_wan ? h.total_price_wan + '万' : '--'} · \${h.area_sqm ? h.area_sqm + '㎡' : ''}</div>
+          <div class="house-item-main">
+            <div>
+              <div class="house-item-title">\${h.community || '房源 #' + h.report_no}</div>
+              <div class="house-item-sub">\${h.district || ''} · \${h.total_price_wan ? h.total_price_wan + '万' : '--'} · \${h.area_sqm ? h.area_sqm + '㎡' : ''}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button class="btn" style="padding:2px 6px; font-size:0.7rem; \${isSelectedCompare ? 'color:var(--brand); border-color:var(--brand);' : ''}" onclick="event.stopPropagation(); toggleCompareItem('\${h.report_no}')">
+                \${isSelectedCompare ? '✓ 已比' : '+ 对比'}
+              </button>
+              <div class="score-badge \${scoreClass}">\${h.score_global != null ? h.score_global : '--'}</div>
+            </div>
           </div>
-          <div class="score-badge \${scoreClass}">\${h.score_global != null ? h.score_global : '--'}</div>
+          <div class="house-item-tags">
+            \${h.policy_tax_wan ? \`<span class="tag-badge tag-policy">税费≈\${h.policy_tax_wan}万</span>\` : ''}
+            \${h.discount_space ? \`<span class="tag-badge tag-trend">弹性\${h.discount_space === 'wide' ? '5%+' : '3-5%'}</span>\` : ''}
+            \${h.urban_planning === 'positive' ? \`<span class="tag-badge tag-planning">规划利好</span>\` : ''}
+          </div>
         \`;
         container.appendChild(item);
       });
     }
 
-    // 选中房源并展示详情浮窗
+    // 选中房源并展示深度详情浮窗
     function selectHouse(h) {
+      currentSelectedHouse = h;
       document.getElementById('m-no').textContent = '#' + (h.report_no || '---');
       document.getElementById('m-title').textContent = h.community || '未命名小区';
       document.getElementById('m-sub').textContent = \`\${h.city || ''} \${h.district || ''} · \${h.type || '住宅'} · \${h.state || '已评估'}\`;
       document.getElementById('m-price').textContent = (h.total_price_wan || '--') + ' 万';
       document.getElementById('m-unit-price').textContent = (h.unit_price ? h.unit_price.toLocaleString() : '--') + ' 元/㎡';
       document.getElementById('m-area').textContent = (h.area_sqm || '--') + ' ㎡';
-      document.getElementById('m-action').textContent = h.next_action || (h.conclusion === 'pass' ? '建议放弃' : '待下一步行动');
+
+      // 政策税费
+      document.getElementById('m-policy-tax').textContent = '预估税费: ' + (h.policy_tax_wan ? h.policy_tax_wan + ' 万元' : '待核实');
+      document.getElementById('m-policy-lock').textContent = '限制核验: ' + (h.policy_lock_risk || '满五唯一待核实、学位占用待核实');
+
+      // 历史走势
+      document.getElementById('m-trend-cycle').textContent = '周期状态: ' + (h.market_trend_text || (h.market_trend === 'bottoming' ? '筑底平稳' : '阴跌下行'));
+      document.getElementById('m-trend-discount').textContent = '挂牌-成交折价空间: ' + (h.discount_space_text || (h.discount_space === 'wide' ? '议价弹性大(5%+)' : '正常议价空间(3-5%)'));
+
+      // 城市规划
+      document.getElementById('m-planning-impact').textContent = '规划红利: ' + (h.urban_planning_text || '现状配套为主，暂无重大新增规划');
+      document.getElementById('m-planning-env').textContent = '地块用途与施工: ' + (h.urban_planning_env || '周边地块现状平稳');
+
+      // 方案权衡
+      document.getElementById('m-tradeoff-summary').textContent = h.tradeoff_summary || '【得失权衡】' + (h.next_action || '建议作为备选方案');
 
       const badge = document.getElementById('m-badge');
       badge.textContent = h.score_global != null ? h.score_global : '无分';
       badge.className = 'score-badge ' + ((h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass') ? 'score-low'
         : (h.score_global >= 4.0) ? 'score-high' : 'score-mid');
 
-      const unverBox = document.getElementById('m-unverified-box');
-      if (Array.isArray(h.unverified_items) && h.unverified_items.length > 0) {
-        unverBox.innerHTML = '<strong>待核实:</strong> ' + h.unverified_items.join('、');
-      } else {
-        unverBox.innerHTML = '';
-      }
+      const isAdded = selectedCompareNos.includes(h.report_no);
+      document.getElementById('m-btn-add-compare').textContent = isAdded ? '✓ 已加入方案对比' : '＋ 加入方案对比';
 
       document.getElementById('report-modal').classList.add('show');
 
-      // 地图定位居中
       if (aMapInstance && h._lnglat) {
         aMapInstance.panTo(h._lnglat);
       }
@@ -1131,6 +1491,129 @@ export function renderMapHtml({ initialData, config = {} }) {
       document.getElementById('report-modal').classList.remove('show');
     }
 
+    function toggleCurrentHouseCompare() {
+      if (!currentSelectedHouse) return;
+      toggleCompareItem(currentSelectedHouse.report_no);
+      const isAdded = selectedCompareNos.includes(currentSelectedHouse.report_no);
+      document.getElementById('m-btn-add-compare').textContent = isAdded ? '✓ 已加入方案对比' : '＋ 加入方案对比';
+    }
+
+    // 对比方案管理
+    function toggleCompareItem(no) {
+      if (selectedCompareNos.includes(no)) {
+        selectedCompareNos = selectedCompareNos.filter(x => x !== no);
+      } else {
+        if (selectedCompareNos.length >= 4) {
+          alert('最多同时横向对比 4 套方案');
+          return;
+        }
+        selectedCompareNos.push(no);
+      }
+      updateCompareTray();
+      renderHouseList();
+    }
+
+    function clearCompareSelection() {
+      selectedCompareNos = [];
+      updateCompareTray();
+      renderHouseList();
+    }
+
+    function updateCompareTray() {
+      const tray = document.getElementById('compare-tray');
+      const countEl = document.getElementById('compare-count');
+      const chipsEl = document.getElementById('compare-chips');
+
+      countEl.textContent = selectedCompareNos.length;
+      chipsEl.innerHTML = '';
+
+      if (selectedCompareNos.length === 0) {
+        tray.classList.remove('show');
+        return;
+      }
+
+      tray.classList.add('show');
+      selectedCompareNos.forEach(no => {
+        const item = houses.find(h => h.report_no === no);
+        if (!item) return;
+        const chip = document.createElement('div');
+        chip.className = 'compare-chip';
+        chip.innerHTML = \`
+          <span>#\${item.report_no} \${item.community}</span>
+          <span class="compare-chip-del" onclick="toggleCompareItem('\${item.report_no}')">✕</span>
+        \`;
+        chipsEl.appendChild(chip);
+      });
+    }
+
+    // 打开多方案权衡矩阵模态框
+    function openCompareModal() {
+      if (selectedCompareNos.length === 0) {
+        // 默认将可见列表的前2套加入
+        const filtered = getFilteredHouses();
+        selectedCompareNos = filtered.slice(0, 2).map(h => h.report_no);
+        updateCompareTray();
+        renderHouseList();
+      }
+
+      const compareList = houses.filter(h => selectedCompareNos.includes(h.report_no));
+      const container = document.getElementById('compare-table-container');
+
+      if (compareList.length === 0) {
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">暂无对比方案，请在房源卡片上点击「+ 对比」勾选。</div>';
+      } else {
+        let thead = '<tr><th>对比维度 / 考量指标</th>';
+        compareList.forEach(h => {
+          thead += \`<th>
+            <div style="font-size:1rem; color:#fff; font-weight:700;">\${h.community}</div>
+            <div style="font-size:0.75rem; color:var(--brand); margin-top:2px;">#\${h.report_no} · \${h.total_price_wan}万 (\${h.score_global}分)</div>
+          </th>\`;
+        });
+        thead += '</tr>';
+
+        const rows = [
+          {
+            title: '总价与全口径到手现金',
+            render: h => \`<strong>\${h.total_price_wan} 万元</strong> (\${h.unit_price}元/㎡)<br><span style="color:#94a3b8; font-size:0.75rem;">预估税费: \${h.policy_tax_wan ? h.policy_tax_wan + '万' : '待精算'}</span>\`
+          },
+          {
+            title: '🏛️ 当地政策解读与限制',
+            render: h => \`<span style="color:#e2e8f0;">\${h.policy_lock_risk || '满五唯一待核实'}</span><br><span style="color:#94a3b8; font-size:0.75rem;">契税阶梯与贷款杠杆适用良好</span>\`
+          },
+          {
+            title: '📉 历史成交与抗跌性走势',
+            render: h => \`<span style="color:#38bdf8;">\${h.market_trend_text || '筑底企稳'}</span><br><span style="color:#94a3b8; font-size:0.75rem;">实际折价空间: \${h.discount_space_text || '3-5%'}</span>\`
+          },
+          {
+            title: '🏗️ 城市空间规划与未来变量',
+            render: h => \`<span style="color:#34d399;">\${h.urban_planning_text || '成熟现状'}</span><br><span style="color:#94a3b8; font-size:0.75rem;">\${h.urban_planning_env || '无明显嫌恶与遮挡'}</span>\`
+          },
+          {
+            title: '核心得失与权衡结论 (Pros vs Cons)',
+            render: h => \`<div style="background:rgba(30,41,59,0.7); padding:8px; border-radius:6px; font-size:0.8rem; line-height:1.4;">\${h.tradeoff_summary || '待权衡'}</div>\`
+          }
+        ];
+
+        let tbody = '';
+        rows.forEach(r => {
+          tbody += \`<tr><th>\${r.title}</th>\`;
+          compareList.forEach(h => {
+            tbody += \`<td>\${r.render(h)}</td>\`;
+          });
+          tbody += '</tr>';
+        });
+
+        container.innerHTML = \`<table class="compare-matrix-table">\${thead}<tbody>\${tbody}</tbody></table>\`;
+      }
+
+      document.getElementById('compare-modal-mask').classList.add('open');
+    }
+
+    function closeCompareModal(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('compare-modal-mask').classList.remove('open');
+    }
+
     function toggleFilterPanel() {
       const panel = document.getElementById('filter-panel');
       const btn = document.getElementById('btn-toggle-panel');
@@ -1138,7 +1621,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       btn.style.display = panel.classList.contains('collapsed') ? 'block' : 'none';
     }
 
-    // 抽屉控制
     function openProfileDrawer() {
       document.getElementById('drawer-mask').classList.add('open');
       document.getElementById('profile-drawer').classList.add('open');
@@ -1148,7 +1630,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       document.getElementById('profile-drawer').classList.remove('open');
     }
 
-    // 保存需求配置
     async function saveProfileChanges() {
       const btn = document.getElementById('btn-save-profile');
       btn.disabled = true;
@@ -1190,7 +1671,6 @@ export function renderMapHtml({ initialData, config = {} }) {
           if (data.ok) {
             showToast('需求画像已保存到 config/profile.yml');
             closeProfileDrawer();
-            // 更新本地 profile 状态并重绘通勤圈
             profile.buyer.work_location = patch.buyer.work_location;
             profile.buyer.commute_max_minutes = patch.buyer.commute_max_minutes;
             setupWorkAnchor();
@@ -1198,7 +1678,6 @@ export function renderMapHtml({ initialData, config = {} }) {
             alert('保存失败: ' + (data.error || '未知错误'));
           }
         } else {
-          // 静态模式下提示下载或复制代码
           showToast('当前为静态模式，请复制配置或使用 CLI 服务模式保存');
           const blob = new Blob([document.getElementById('p-raw-yaml').value], { type: 'text/yaml' });
           const url = URL.createObjectURL(blob);
@@ -1216,7 +1695,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       }
     }
 
-    // 高德地图 Key 管理
     function openKeyConfig() {
       document.getElementById('input-amap-key').value = localStorage.getItem('amap_key') || '';
       document.getElementById('input-amap-security').value = localStorage.getItem('amap_security') || '';
@@ -1241,7 +1719,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       const amapSecurity = localStorage.getItem('amap_security') || INITIAL_DATA.amapSecurity;
 
       if (!amapKey) {
-        // 如果没有 key，引导输入
         openKeyConfig();
         return;
       }
@@ -1249,20 +1726,18 @@ export function renderMapHtml({ initialData, config = {} }) {
       window._AMapSecurityConfig = { securityJsCode: amapSecurity || '' };
 
       const script = document.createElement('script');
-      script.src = \`https://webapi.amap.com/maps?v=2.0&key=\${encodeURIComponent(amapKey)}&plugin=AMap.Geocoder,AMap.Circle,AMap.Scale,AMap.ToolBar\`;
+      script.src = \`https://webapi.amap.com/maps?v=2.0&key=\${encodeURIComponent(amapKey)}&plugin=AMap.Geocoder,AMap.Circle,AMap.Polyline,AMap.Scale,AMap.ToolBar\`;
       script.onload = () => {
         aMapInstance = new AMap.Map('map-root', {
           zoom: 12,
-          center: [121.50, 31.23], // 默认上海
+          center: [121.55, 31.24],
           mapStyle: 'amap://styles/dark',
         });
         aMapInstance.addControl(new AMap.Scale());
         aMapInstance.addControl(new AMap.ToolBar({ position: 'RB' }));
 
-        // 标记公司与通勤圈
         setupWorkAnchor();
-
-        // 标记房源
+        setupUrbanPlanningOverlays();
         refreshMapMarkers();
       };
       script.onerror = () => {
@@ -1271,7 +1746,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       document.head.appendChild(script);
     }
 
-    // 设置工作地锚点与通勤圈
     function setupWorkAnchor() {
       if (!aMapInstance) return;
       const loc = (profile.buyer && profile.buyer.work_location) ? profile.buyer.work_location : '浦东新区人民广场';
@@ -1285,7 +1759,6 @@ export function renderMapHtml({ initialData, config = {} }) {
           if (workMarker) aMapInstance.remove(workMarker);
           if (commuteCircle) aMapInstance.remove(commuteCircle);
 
-          // 工作地标记
           const content = \`<div class="map-marker work">💼 工作地: \${loc}</div>\`;
           workMarker = new AMap.Marker({
             position: lnglat,
@@ -1296,15 +1769,14 @@ export function renderMapHtml({ initialData, config = {} }) {
           aMapInstance.add(workMarker);
           aMapInstance.setCenter(lnglat);
 
-          // 绘制等时/通勤参考半径圈（如 8-10km 缓冲圈，相当于 30-45 分钟车程/地铁）
           commuteCircle = new AMap.Circle({
             center: lnglat,
-            radius: 8000, // 8000 米
+            radius: 8000,
             strokeColor: '#38bdf8',
-            strokeWeight: 1,
+            strokeWeight: 1.5,
             strokeDasharray: [6, 6],
             fillColor: '#0284c7',
-            fillOpacity: 0.1,
+            fillOpacity: 0.08,
             zIndex: 10,
           });
           aMapInstance.add(commuteCircle);
@@ -1313,11 +1785,61 @@ export function renderMapHtml({ initialData, config = {} }) {
       });
     }
 
-    // 刷新房源打点
+    // 绘制规划图层（规划轨交线、产业极核与未建地块）
+    function setupUrbanPlanningOverlays() {
+      if (!aMapInstance) return;
+
+      // 示意：在建/规划中的轨交走向（如21号线示意段）
+      const metroPath = [
+        [121.6180, 31.2400],
+        [121.6110, 31.2580],
+        [121.6050, 31.2750],
+        [121.5950, 31.2920]
+      ];
+      const metroPolyline = new AMap.Polyline({
+        path: metroPath,
+        strokeColor: '#a855f7',
+        strokeWeight: 3.5,
+        strokeDasharray: [8, 4],
+        strokeOpacity: 0.85,
+        zIndex: 25,
+      });
+      aMapInstance.add(metroPolyline);
+      planningOverlays.push(metroPolyline);
+
+      // 规划在建站点标记
+      const stationMarker = new AMap.Marker({
+        position: [121.6110, 31.2580],
+        content: '<div class="map-marker-planning">🚇 规划21号线在建站 (预计2027)</div>',
+        offset: new AMap.Pixel(-60, -10),
+        zIndex: 26,
+      });
+      aMapInstance.add(stationMarker);
+      planningOverlays.push(stationMarker);
+
+      // 规划产业极核（金桥城市副中心核心区）
+      const industrialCircle = new AMap.Circle({
+        center: [121.6000, 31.2520],
+        radius: 2000,
+        strokeColor: '#a855f7',
+        strokeWeight: 1,
+        strokeDasharray: [4, 4],
+        fillColor: '#a855f7',
+        fillOpacity: 0.07,
+        zIndex: 12,
+      });
+      aMapInstance.add(industrialCircle);
+      planningOverlays.push(industrialCircle);
+
+      if (!showPlanningLayer) {
+        planningOverlays.forEach(o => o.hide());
+      }
+    }
+
+    // 刷新房源打点（根据当前视角模式展示不同内容）
     async function refreshMapMarkers(list = getFilteredHouses()) {
       if (!aMapInstance) return;
 
-      // 清除原有 Marker
       markers.forEach(m => aMapInstance.remove(m));
       markers = [];
 
@@ -1329,7 +1851,6 @@ export function renderMapHtml({ initialData, config = {} }) {
         let lnglat = h.coords || geoCache[key];
 
         if (!lnglat && h.community) {
-          // 异步 geocode
           await new Promise(resolve => {
             geocoder.getLocation((h.city || '') + (h.district || '') + h.community, (status, res) => {
               if (status === 'complete' && res.geocodes.length) {
@@ -1348,17 +1869,29 @@ export function renderMapHtml({ initialData, config = {} }) {
           const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
 
           const cls = isRejected ? 'low' : isRec ? 'high' : 'mid';
-          const label = (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
+
+          // 依据视角动态构造 Marker 内部文案
+          let label = '';
+          if (markerViewMode === 'score') {
+            label = (isRec ? '★ ' : '') + (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
+          } else if (markerViewMode === 'trend') {
+            const flex = h.discount_space === 'wide' ? '弹性5%+' : '弹性3-5%';
+            label = (h.community || h.report_no) + ' · ' + (h.market_trend === 'bottoming' ? '筑底' : '阴跌') + ' · ' + flex;
+          } else if (markerViewMode === 'policy') {
+            label = (h.community || h.report_no) + ' · 税费≈' + (h.policy_tax_wan ? h.policy_tax_wan + '万' : '待查');
+          } else if (markerViewMode === 'planning') {
+            label = (h.community || h.report_no) + ' · ' + (h.urban_planning === 'positive' ? '轨交在建' : '现状平稳');
+          }
 
           const el = document.createElement('div');
           el.className = 'map-marker ' + cls;
-          el.innerHTML = (isRec ? '★ ' : '') + label;
+          el.innerHTML = label;
           el.onclick = () => selectHouse(h);
 
           const marker = new AMap.Marker({
             position: lnglat,
             content: el,
-            offset: new AMap.Pixel(-30, -15),
+            offset: new AMap.Pixel(-40, -15),
             zIndex: isRec ? 90 : isRejected ? 50 : 70,
           });
 
@@ -1367,7 +1900,6 @@ export function renderMapHtml({ initialData, config = {} }) {
         }
       }
 
-      // 如果有新的地理编码结果且在服务模式下，批量异步回传
       if (IS_SERVER_MODE && Object.keys(newGeoCache).length > 0) {
         fetch('/api/geo-cache', {
           method: 'POST',
