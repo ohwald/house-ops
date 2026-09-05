@@ -21,13 +21,15 @@ const sysFiles = [
   'modes/_shared.md', 'modes/intake.md', 'modes/evaluate.md',
   'modes/deep-dive.md', 'modes/negotiate.md', 'modes/watchlist.md',
   'modes/triage.md', 'modes/compare.md', 'modes/visit.md',
-  'modes/contract.md', 'modes/doctor.md', 'modes/stats.md',
+  'modes/contract.md', 'modes/doctor.md', 'modes/stats.md', 'modes/scan.md',
   'templates/states.yml', 'templates/policy-notes.cn.yml',
-  'templates/contract-checklist.cn.yml',
+  'templates/contract-checklist.cn.yml', 'templates/official-sources.cn.yml',
   'config/profile.example.yml',
   'package.json',
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
-  'scripts/lib/data.mjs', 'scripts/dashboard.mjs',
+  'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/dashboard.mjs',
+  'scripts/map.mjs',
+  'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
 ];
 for (const f of sysFiles) {
   check((await exists(join(root, f))) ? 'pass' : 'fail', `系统文件 ${f}`, exists ? '' : '缺失');

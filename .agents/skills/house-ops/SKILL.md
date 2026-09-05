@@ -2,17 +2,19 @@
 name: house-ops
 description: >-
   AI 购房决策指挥中心——多轮对话明确购房需求（预算/孩子年龄/老人照护/特殊需求），
-  对公开在售房源（优先中国大陆）做个性化评级打分，速筛、多盘对比、深挖高分房源
+  对公开在售房源（优先中国大陆）做个性化评级打分，速筛、扫描房源采集挂牌/成交价、
+  多盘对比、深挖高分房源
   （历史价格/周边环境/本地政策），审合同条款，并给出沟通谈判建议。
   Use when the user pastes a property listing URL or description, wants to
-  clarify home-buying needs, quickly triage or compare listings, deep-dive a
+  clarify home-buying needs, quickly triage, scan a listing for
+  listing-vs-transaction price cross-check, compare listings, deep-dive a
   highly scored property, review a purchase contract, record a viewing, ask
   for negotiation advice, or manage the watchlist. 当用户粘贴房源链接或描述、
-  想明确购房需求、速筛或对比房源、深挖某套房源、审合同、记录带看、要谈判
+  想明确购房需求、速筛/扫描/对比房源、深挖某套房源、审合同、记录带看、要谈判
   沟通建议或管理关注清单时使用。
 arguments: mode
 user-invocable: true
-argument-hint: "[intake | triage | evaluate | deep-dive | compare | visit | negotiate | contract | watchlist | stats | doctor]"
+argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit | negotiate | contract | watchlist | stats | doctor]"
 ---
 
 # house-ops 技能路由器
@@ -33,6 +35,7 @@ argument-hint: "[intake | triage | evaluate | deep-dive | compare | visit | nego
 | `intake`（别名：需求、画像、onboarding） | `modes/intake.md` |
 | `evaluate`（别名：评估、评级、打分） | `modes/evaluate.md` |
 | `triage`（别名：速筛、快筛、triage） | `modes/triage.md` |
+| `scan`（别名：扫描、采集、查成交、价格核实） | `modes/scan.md` |
 | `deep-dive`（别名：深挖、调研、deep） | `modes/deep-dive.md` |
 | `negotiate`（别名：谈判、沟通、约看） | `modes/negotiate.md` |
 | `compare`（别名：对比、比较、横评） | `modes/compare.md` |
@@ -57,6 +60,7 @@ house-ops — AI 购房决策指挥中心
 
   /house-ops intake      多轮对话明确你的购房需求，生成需求画像（首次使用先跑这个）
   /house-ops triage      60 秒速筛：粘贴链接快速判断值不值得完整评估
+  /house-ops scan        扫描房源链接：识别平台、采集挂牌/成交价，政务数据交叉验证
   /house-ops evaluate    评估一套房源：粘贴链接或描述，输出六维评级报告
   /house-ops deep-dive   对高分房源（≥4.0）深挖：历史价格/周边/政策/竞品/产权/生活圈
   /house-ops compare     2-6 套已评估房源横向对比矩阵与场景化结论
@@ -82,5 +86,6 @@ house-ops — AI 购房决策指挥中心
 3. 任何模式涉及**中国政策事实**（限购/税费/利率/学区/商办/法拍）时，读 `templates/policy-notes.cn.yml` 并遵守其"用前联网核实"规则；`contract` 另读 `templates/contract-checklist.cn.yml`。
 4. `watchlist`、`evaluate`、`visit`、`compare` 还需读 `templates/states.yml` 以获取 canonical 状态名。
 5. `stats` 优先跑 `node scripts/stats.mjs`，失败或需要更深解读时按 mode 文件人工汇总。
+6. `scan`：只读 `modes/scan.md`；先跑 `node scripts/scan.mjs detect <url>` 获取平台与字段清单；涉及成交价/政务数据时读 `templates/official-sources.cn.yml`（用前联网核实）；可靠度档位以 `modes/_shared.md`「数据可靠度四档」节为准。
 
 加载顺序纪律：系统层（`_shared.md`）先读，用户层（`_profile.md`、`_custom.md`、`_brief.md`）后读并覆盖系统默认。

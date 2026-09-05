@@ -29,11 +29,12 @@
 | `AGENTS.md`、`CLAUDE.md` | 总规范与 CLI 入口 |
 | `.agents/skills/house-ops/SKILL.md` | 技能路由器（`.claude/`、`.zcode/` 下为符号链接） |
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
-| `modes/*.md`（非 `_` 前缀） | 十一个工作模式 |
+| `modes/*.md`（非 `_` 前缀） | 十二个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
 | `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段） |
-| `templates/` | 状态机 `states.yml`、政策数据表 `policy-notes.cn.yml`、合同走查 `contract-checklist.cn.yml` |
-| `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计（零依赖，Node ≥18） |
+| `templates/` | 状态机 `states.yml`、政策数据表 `policy-notes.cn.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` |
+| `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
+| `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
 
 **THE RULE**：当用户要求修改"我的需求/偏好/预算"时，写入 `modes/_profile.md` 或 `config/profile.yml`；当用户要求修改"流程/家规/评分口径"时，写入 `modes/_custom.md`。**永远不要**为用户个性化内容修改 `modes/_shared.md` 或其他系统层文件。
 
@@ -60,6 +61,7 @@
 | `modes/intake.md` | 多轮对话采集购房需求（家庭结构→衍生需求翻译），生成 `config/profile.yml` + `modes/_profile.md` + `modes/_brief.md` |
 | `modes/evaluate.md` | 单房源六维评级，产出报告并登记 watchlist；Machine Summary schema 的 SoT |
 | `modes/triage.md` | 60 秒快速速筛（`_brief.md` 三问），不落报告 |
+| `modes/scan.md` | 平台扫描与价格采集：按平台模板提取挂牌字段、多源收集成交价、政务数据交叉验证（不评分，落 `data/scans/`） |
 | `modes/deep-dive.md` | 高分房源（≥4.0）六轴深挖 |
 | `modes/negotiate.md` | 高分房源（≥4.0）的核实清单、议价策略与沟通话术 |
 | `modes/compare.md` | 2-6 套已评估房源横向对比矩阵与场景化结论 |
@@ -71,11 +73,14 @@
 | `templates/states.yml` | 购房状态机的 canonical 状态定义 |
 | `templates/policy-notes.cn.yml` | 中国市场政策数据表（限购/税费/贷款/学区/商办/法拍等，带 as_of，用前核实） |
 | `templates/contract-checklist.cn.yml` | 交易文件条款走查清单（contract 模式用） |
+| `templates/official-sources.cn.yml` | 各城市政务房地产公开数据源登记表（scan 模式交叉验证用） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
+| `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
 | `scripts/lib/data.mjs` | stats/dashboard 共享数据解析层（报告/watchlist/状态机） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
+| `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件 HTML `data/map.html` 或启动 `--serve` 本地服务，支持高德地图、通勤圈、筛选与画像保存；零外部依赖） |
 
 ## First Run — Onboarding
 
@@ -91,6 +96,7 @@
 |---|---|
 | 粘贴房源 URL / 房源文字描述 / 说"帮我看看这套房" | `evaluate` |
 | "快速筛一下"、"值不值得点开看"（想省 token 先过一遍） | `triage` |
+| "扫描这个链接"、"采集价格"、"查成交价"、"挂牌价和实际成交对得上吗"、"和官方数据交叉验证" | `scan` |
 | 首次使用、"我要买房"、说需求变了、要求更新画像 | `intake` |
 | "深挖 003"、"这套值得买吗，详细调研一下" | `deep-dive` |
 | "怎么跟房东谈"、"约看"、"给中介发什么" | `negotiate` |
@@ -99,6 +105,7 @@
 | "帮我看看合同/认购书/补充协议"（+粘贴条款） | `contract` |
 | "我的清单"、"看房进度"、"更新 005 状态为已看房" | `watchlist` |
 | "统计一下"、"我的找房数据"、"失分分析" | `stats` |
+| "在地图上看"、"地图决策"、"房源分布"、"生成地图" | `map`（优先跑 `node scripts/map.mjs --serve` 或 `scripts/map.mjs`） |
 | "自检/体检"、"哪里配置有问题" | `doctor` |
 | `/house-ops` 无参数或"你能做什么" | 显示 discovery 菜单（见 SKILL.md） |
 | 模糊但包含房源链接或明显房源描述 | 默认 `evaluate`，先说明将执行的流程 |
@@ -125,3 +132,4 @@
 - 评估完成必须同步登记 watchlist（新房源新增行；已存在的更新评分与状态），失败时告知用户。
 - `data/notes/` 下带看记录（`{NNN}-visit-{日期}.md`）与合同审查记录（`{NNN}-contract-{日期}.md`）是事实记录，只追加不改写历史条目；增量重评在原报告追加 `## 增量重评` 节，不覆盖原文。
 - 报告编号只能经 `scripts/reserve-report-num.mjs`（或等价的手动 max+1）分配，不得凭空指定。
+- 扫描记录（scan 模式）落 `data/scans/`，schema `house-ops.scan/1`（SoT：`modes/scan.md`）：不占报告编号、不登记 watchlist；evaluate / deep-dive / negotiate 引用扫描记录时必须带 as_of 与可靠度档位。

@@ -2,13 +2,16 @@
   "name": "house-ops",
   "version": "0.3.0",
   "private": true,
-  "description": "AI 购房决策指挥中心 — 房源评级/深挖/谈判建议（提示词操作系统；脚本层零依赖，仅 dashboard 使用 ink/react）",
+  "description": "AI 购房决策指挥中心 — 房源评级/平台扫描/深挖/谈判建议（提示词操作系统；脚本层零依赖，仅 dashboard 使用 ink/react）",
   "type": "module",
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
     "reserve": "node scripts/reserve-report-num.mjs",
+    "scan": "node scripts/scan.mjs",
     "stats": "node scripts/stats.mjs",
-    "dashboard": "node scripts/dashboard.mjs"
+    "dashboard": "node scripts/dashboard.mjs",
+    "map": "node scripts/map.mjs",
+    "map:serve": "node scripts/map.mjs --serve"
   },
   "engines": {
     "node": ">=18"

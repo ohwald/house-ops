@@ -3,9 +3,10 @@
 # 需求画像（入库的是 profile.example.yml）
 config/profile.yml
 
-# 画像语义层与家规（入库的是 *.template.md）
+# 画像语义层、速筛简版与家规（入库的是 *.template.md）
 modes/_profile.md
 modes/_custom.md
+modes/_brief.md
 
 # 运行时数据：整体忽略，只保留 .gitkeep 占位符——
 # 新增的生成文件自动被覆盖，无需逐个补充规则
