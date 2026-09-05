@@ -139,5 +139,7 @@ next_action: ""
 ## Post-evaluation
 
 1. 存报告：`reports/{NNN}-{小区slug}-{YYYY-MM-DD}.md`。编号优先用 `node scripts/reserve-report-num.mjs` 原子分配（3 位零填充）；脚本不可用时手动取 `reports/` 现有最大编号 +1。
-2. 更新 `data/watchlist.md`：新房源新增一行（状态 `已评估`）；已存在的更新评分列，状态保持不变。
-3. 回复用户：报告路径 + 一段话结论 + 下一步建议。
+2. 存客观事实档案：将交叉验证中查验的政务备案、不动产产调、法定控规图号、教育局施教区公示、历史网签成交明细归档至 `data/evidence/{NNN}-{小区slug}-evidence.md`，作为不可辩驳的客观事实支撑底稿。
+3. 更新 `data/watchlist.md`：新房源新增一行（状态 `已评估`）；已存在的更新评分列，状态保持不变。
+4. 回复用户：报告路径 + 客观事实档案路径 + 一段话结论 + 下一步建议。
+

@@ -1396,15 +1396,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       document.getElementById('p-threshold-giveup').value = t.give_up_below ?? 3.5;
 
       document.getElementById('p-raw-yaml').value = rawYaml || '';
-
-      if (b.total_range_wan) {
-        document.getElementById('filter-price-min').value = b.total_range_wan[0];
-        document.getElementById('filter-price-max').value = b.total_range_wan[1];
-      }
-      if (pref.size_range_sqm) {
-        document.getElementById('filter-area-min').value = pref.size_range_sqm[0];
-        document.getElementById('filter-area-max').value = pref.size_range_sqm[1];
-      }
     }
 
     function updateStatsHeader() {
@@ -1913,6 +1904,17 @@ export function renderMapHtml({ initialData, config = {} }) {
         marker.on('click', () => selectHouse(h));
         markersLayerGroup.addLayer(marker);
       });
+
+      // 自动聚焦视野至所有可见房源
+      if (list.length > 0 && leafletMap) {
+        const validCoords = list.map(h => h._latlng).filter(Boolean);
+        if (validCoords.length > 0) {
+          const bounds = L.latLngBounds(validCoords);
+          if (bounds.isValid()) {
+            leafletMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+          }
+        }
+      }
     }
 
     function showToast(msg, dur = 2000) {

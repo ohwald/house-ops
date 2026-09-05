@@ -17,7 +17,7 @@ import { loadGeoCache, saveGeoCache } from './lib/geo.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const GEO_CACHE_PATH = join(ROOT, 'data', '.geo-cache.json');
+const GEO_CACHE_PATH = join(ROOT, 'data', 'geo-cache.json');
 const PROFILE_PATH = join(ROOT, 'config', 'profile.yml');
 const DEFAULT_OUT_PATH = join(ROOT, 'data', 'map.html');
 
@@ -31,9 +31,9 @@ if (isHelp) {
 house-ops 地图决策中枢
 
 用法:
-  node scripts/map.mjs                # 生成静态 HTML (data/map.html)
-  node scripts/map.mjs --serve [port] # 启动本地服务并自动在浏览器中打开 (默认端口 3000)
-  node scripts/map.mjs --out <file>   # 指定输出文件路径
+  node scripts/map.mjs                # 生成静态页面 data/map.html
+  node scripts/map.mjs --serve [port] # 生成并启动本地轻量 HTTP 服务（支持保存画像）
+  npm run map                         # 快捷方式
 
 选项:
   --serve [port]   启动本地 API 服务器，支持将页面修改实时持久化到 config/profile.yml
@@ -57,22 +57,29 @@ if (serveIdx !== -1 && args[serveIdx + 1] && !args[serveIdx + 1].startsWith('-')
 
 // 聚合数据加载
 async function loadFullData() {
-  const [reports, watchlist, states, rawProfile, geoCache] = await Promise.all([
+  let geoCache = await loadGeoCache(GEO_CACHE_PATH);
+  if (Object.keys(geoCache).length === 0) {
+    geoCache = await loadGeoCache(join(ROOT, 'data', '.geo-cache.json'));
+  }
+
+  const [reports, watchlist, states, rawProfile] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
     readStates(join(ROOT, 'templates', 'states.yml')),
     readFile(PROFILE_PATH, 'utf8').catch(() => ''),
-    loadGeoCache(GEO_CACHE_PATH),
   ]);
 
   const parsedProfile = parseProfile(rawProfile);
 
-  // 状态机补充到报告列表中（如果 reports 里有匹配 watchlist 编号）
+  // 状态机与地理坐标补充到报告列表中
   const watchMap = new Map((watchlist || []).map(w => [w.no, w]));
   const mergedReports = reports.map(r => {
     const w = watchMap.get(r.report_no);
+    const key = [r.city, r.district, r.community].filter(Boolean).join('·');
+    const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
     return {
       ...r,
+      coords,
       state: w ? w.state : (r.state || '已评估'),
       watchlist_note: w ? w.note : '',
     };

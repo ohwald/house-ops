@@ -20,6 +20,7 @@
 | `modes/_profile.md` | 画像的语义补充（生活方式、硬性 DQ 规则、权重取舍理由） |
 | `modes/_custom.md` | 家规：用户对流程/评分规则的个性化覆盖 |
 | `data/` | 运行时状态：`watchlist.md`（关注清单）、`notes/`（带看记录等） |
+| `data/evidence/` | 第二阶段深度评估客观事实档案 `{NNN}-{小区slug}-evidence.md`（政务备案/法定控规/真实网签样本/产调核查凭证） |
 | `reports/` | 评估报告 `{NNN}-{小区slug}-{YYYY-MM-DD}.md`，编号即主键 |
 
 ### System Layer（系统层，无用户数据）
