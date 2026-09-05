@@ -943,11 +943,10 @@ export function renderMapHtml({ initialData, config = {} }) {
         <div style="color:var(--text-muted); font-size:0.75rem;" id="m-planning-env">周边未建地块用途与施工期影响: --</div>
       </div>
 
-      <!-- 客观事实 vs 营销甄别 (De-biasing) -->
-      <div class="detail-card-section" style="border-color:rgba(245, 158, 11, 0.4);">
-        <div class="section-headline" style="color:#fbbf24;">🔍 客观事实 vs 营销甄别 (去伪存真)</div>
-        <div style="color:#f87171; font-size:0.75rem;" id="m-marketing-claim">⚠️ 宣传声称: --</div>
-        <div style="color:#34d399; font-size:0.75rem;" id="m-verified-fact">✅ 交叉验证事实: --</div>
+      <!-- 客观核验要点 -->
+      <div class="detail-card-section">
+        <div class="section-headline">🔍 关键核查要点</div>
+        <div style="color:#cbd5e1; font-size:0.75rem;" id="m-verified-fact">核查结果: --</div>
       </div>
 
       <!-- 中立得失权衡总结 -->
@@ -1552,8 +1551,9 @@ export function renderMapHtml({ initialData, config = {} }) {
 
       document.getElementById('m-tradeoff-summary').textContent = h.tradeoff_summary || '【得失权衡】' + (h.next_action || '建议作为备选方案');
 
-      document.getElementById('m-marketing-claim').textContent = '⚠️ 营销宣传: ' + (h.marketing_claim || '中介常规宣传口径');
-      document.getElementById('m-verified-fact').textContent = '✅ 交叉验证: ' + (h.verified_fact || '已根据官方规划与真实成交核验');
+      if (document.getElementById('m-verified-fact')) {
+        document.getElementById('m-verified-fact').textContent = '核查结果: ' + (h.verified_fact || '已结合官方规划与网签成交比对完成核验');
+      }
 
       const badge = document.getElementById('m-badge');
       badge.textContent = h.score_global != null ? h.score_global : '无分';
@@ -1669,8 +1669,8 @@ export function renderMapHtml({ initialData, config = {} }) {
             render: h => \`<span style="color:#34d399;">\${h.urban_planning_text || '成熟现状'}</span><br><span style="color:#94a3b8; font-size:0.75rem;">\${h.urban_planning_env || '无明显嫌恶与遮挡'}</span>\`
           },
           {
-            title: '🔍 营销宣传 vs 客观事实甄别',
-            render: h => \`<div style="font-size:0.75rem; line-height:1.4;"><span style="color:#f87171;">⚠️ \${h.marketing_claim || '宣传口径'}</span><br><span style="color:#34d399;">✅ \${h.verified_fact || '已核验事实'}</span></div>\`
+            title: '🔍 关键客观核验事实',
+            render: h => \`<div style="font-size:0.75rem; line-height:1.4; color:#cbd5e1;">\${h.verified_fact || '已结合官方规划与真实网签核验'}</div>\`
           },
           {
             title: '核心得失与权衡结论 (Pros vs Cons)',
