@@ -72,3 +72,46 @@ export async function readStates(statesPath) {
   while ((m = re.exec(yml))) states.push(m[1]);
   return states;
 }
+
+// 读取单套房源报告详情
+export async function readReportDetail(reportsDir, reportNo) {
+  const files = (await readdir(reportsDir).catch(() => []))
+    .filter(f => f.startsWith(`${reportNo}-`) && f.endsWith('.md') && !f.includes('-deep') && !f.includes('-negotiate'));
+  if (!files.length) return null;
+  const filePath = join(reportsDir, files[0]);
+  const text = await readFile(filePath, 'utf8');
+  const urlMatch = /https?:\/\/[^\s)\"'>]+/i.exec(text);
+  const url = urlMatch ? urlMatch[0] : null;
+  return { file: files[0], filePath, text, url };
+}
+
+// 原子更新 watchlist 状态与更新日期
+export async function updateWatchlistState(watchlistPath, reportNo, newState) {
+  const content = await readFile(watchlistPath, 'utf8').catch(() => null);
+  if (!content) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  const lines = content.split('\n');
+  let updated = false;
+  const newLines = lines.map(line => {
+    if (!line.startsWith('|') || line.includes('---') || line.includes('编号')) return line;
+    const parts = line.split('|');
+    if (parts.length < 10) return line;
+    const no = parts[1].trim();
+    if (no === reportNo) {
+      parts[8] = ` ${newState} `;
+      if (parts.length > 10) {
+        parts[10] = ` ${today} `;
+      }
+      updated = true;
+      return parts.join('|');
+    }
+    return line;
+  });
+  if (updated) {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(watchlistPath, newLines.join('\n'), 'utf8');
+    return true;
+  }
+  return false;
+}
+
