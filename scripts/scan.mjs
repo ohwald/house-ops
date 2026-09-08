@@ -1,26 +1,25 @@
 #!/usr/bin/env node
-// scan.mjs — 房源平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务数据源查询
+// scan.mjs — 房源平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务数据源查询 / 价格历史
 // 零依赖（Node ≥18）。平台模板见 scrapers/（career-ops providers 模式：一平台一模块）。
 // schema SoT：modes/scan.md「扫描记录 schema」节。
 // 用法:
 //   node scripts/scan.mjs detect <url> [url...]          # 识别平台/页面类型，输出提取清单
 //   node scripts/scan.mjs normalize <record.json | ->    # 价格归一化 + 一致性检查（记录走 stdout，警告走 stderr）
-//   node scripts/scan.mjs crosscheck <record.json> [--write]  # 挂牌价 vs 成交价交叉验证
+//   node scripts/scan.mjs crosscheck <record.json> [--write]  # 挂牌价 vs 成交价交叉验证（含归一化）
 //   node scripts/scan.mjs official [城市]                # 查政务公开数据源登记表
+//   node scripts/scan.mjs history [关键词] [--stale-days N]   # 无参=追踪时效表；关键词=单房源时间线与策略信号
+//   node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性验证（判定表输出 + provenance 建议）
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScrapers, detectPlatform } from '../scrapers/_registry.mjs';
-import { normalizeRecord, crosscheckRecord } from '../scrapers/_fields.mjs';
+import { COMMON_LISTING_FIELDS, normalizeRecord, finalizeRecord, buildEntityHistory, matchRecord, verifyAuthenticity } from '../scrapers/_fields.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// 未识别平台的兜底提取清单（scan 模式按此抓取，platform 记 generic）
-const GENERIC_FIELDS = [
-  '小区名（含所在区/板块）', '总价（万元）', '单价（元/㎡）', '建筑面积（㎡）',
-  '户型（几室几厅）', '楼层/总楼层', '电梯（有无）', '建成年代', '挂牌时间与调价记录',
-];
+// 未识别平台的兜底提取清单 = 通用清单派生（不维护第二份手抄）
+const GENERIC_FIELDS = COMMON_LISTING_FIELDS;
 
 async function readStdin() {
   const chunks = [];
@@ -91,17 +90,113 @@ async function cmdNormalize(arg) {
 }
 
 async function cmdCrosscheck(arg, write) {
+  if (write && (arg === '-' || arg === undefined)) {
+    console.error('⛔ --write 需要文件路径；stdin（-）输入只输出到 stdout');
+    process.exit(1);
+  }
   const raw = await readJsonInput(arg);
-  const { record, warnings } = normalizeRecord(raw); // 先归一化保证单位一致，再交叉验证
-  crosscheckRecord(record);
+  // finalizeRecord：归一化 + 定价交叉验证一次完成（两步顺序约定已收进模块）
+  const { record, warnings } = finalizeRecord(raw);
   warnings.forEach((w) => console.error(`⚠️  ${w}`));
   const out = JSON.stringify(record, null, 2);
   if (write) {
     await writeFile(arg, `${out}\n`);
-    console.error(`✅ 交叉验证结果已写回 ${arg}`);
+    console.error(`✅ 定稿结果已写回 ${arg}`);
   } else {
     console.log(out);
   }
+}
+
+// 价格历史：无参 = 全部追踪键的时效表；带关键词 = 单键时间线与策略信号（数值由 _fields 计算）
+async function cmdHistory(arg) {
+  const argv = process.argv.slice(2);
+  let staleDays = 14;
+  if (argv.includes('--stale-days')) staleDays = Number(argv[argv.indexOf('--stale-days') + 1]) || 14;
+  const dir = join(ROOT, 'data', 'scans');
+  const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json'));
+  const records = [];
+  for (const f of files) {
+    try {
+      records.push(JSON.parse(await readFile(join(dir, f), 'utf8')));
+    } catch {
+      console.error(`⚠️  跳过无法解析的扫描记录: ${f}`);
+    }
+  }
+  const entities = buildEntityHistory(records, { staleDays });
+  if (!arg || arg.startsWith('--')) {
+    if (!entities.length) {
+      console.log('data/scans/ 下还没有扫描记录。');
+      return;
+    }
+    console.log(`追踪房源实体时效（阈值 ${staleDays} 天，可在 modes/_custom.md 覆盖；实体 = 同一套房，可跨平台/重挂多挂牌键）：`);
+    for (const e of entities) {
+      const s = e.summary;
+      console.log(`${s.stale ? '⚠️ ' : '✅'} ${e.community}（${e.district}）— 上次实采 ${s.last_date}（${s.days_since_last_capture} 天前）· 挂牌键×${s.listing_count}${s.cross_platform ? '（跨平台）' : ''} · ${s.listing_keys.join(', ')}`);
+    }
+    const stale = entities.filter((e) => e.summary.stale);
+    if (stale.length) console.log(`\n💡 ${stale.length} 套房源实采已过期——建议快速复扫（仅采变动字段：总价/调价次数/带看/在售状态）。`);
+    return;
+  }
+  const hit = entities.filter((e) =>
+    (e.community ?? '').includes(arg)
+    || e.summary.listing_keys.some((k) => k.includes(arg))
+    || (e.fingerprint?.area != null && String(e.fingerprint.area) === arg));
+  if (!hit.length) {
+    console.log(`未找到匹配「${arg}」的房源实体（现有：${entities.map((e) => e.community).join('，') || '无'}）。`);
+    process.exitCode = 2;
+    return;
+  }
+  for (const e of hit) {
+    console.log(JSON.stringify(e, null, 2));
+  }
+}
+
+// 真实性验证：AI 采集证据（小区库/在售列表/政府公示），判定表由脚本执行（零 token、可测试）
+async function cmdVerify(arg, evPath) {
+  if (!arg) {
+    console.error('用法: node scripts/scan.mjs verify <record.json> [--evidence evidence.json]');
+    process.exit(1);
+  }
+  const record = await readJsonInput(arg);
+  let evidence = {};
+  if (evPath) {
+    try { evidence = JSON.parse(await readFile(evPath, 'utf8')); }
+    catch { console.error('⛔ 证据文件不是合法 JSON'); process.exit(1); }
+  } else {
+    console.error('ℹ️  未提供 --evidence：只做记录内检查；真实判定需实采证据（小区库/在售列表/政府公示）');
+  }
+  const result = verifyAuthenticity(record, evidence);
+  console.log(JSON.stringify({ provenance_suggestion: result.provenance_suggestion, checks: result.checks }, null, 2));
+}
+
+// 实体匹配：新记录 vs data/scans/ 全库——识别跨平台同源挂牌与下架重挂
+async function cmdMatch(arg) {
+  if (!arg) {
+    console.error('用法: node scripts/scan.mjs match <record.json | ->');
+    process.exit(1);
+  }
+  const { record, warnings } = normalizeRecord(await readJsonInput(arg));
+  warnings.forEach((w) => console.error(`⚠️  ${w}`));
+  const dir = join(ROOT, 'data', 'scans');
+  const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json'));
+  const corpus = [];
+  for (const f of files) {
+    try {
+      corpus.push(JSON.parse(await readFile(join(dir, f), 'utf8')));
+    } catch {}
+  }
+  const { fingerprint, matches } = matchRecord(record, corpus);
+  const selfKey = `${record.platform}:${record.listing_id ?? record.url}`;
+  const foreign = matches.filter((m) => m.listing_key !== selfKey);
+  console.log(JSON.stringify({
+    fingerprint,
+    note: foreign.some((m) => m.confidence === 'high')
+      ? '命中同源挂牌：同一物理房屋的多平台/重挂记录——历史按实体关联，注意对比各键价差'
+      : matches.length
+        ? '仅低/中置信匹配——人工核对新扫描与旧记录是否同源'
+        : '无同源记录（新实体或新房源）',
+    matches: foreign,
+  }, null, 2));
 }
 
 // 行级解析 templates/official-sources.cn.yml（登记表是扁平两缩进结构，无需 YAML 库）
@@ -134,11 +229,15 @@ async function cmdOfficial(city) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial };
+const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial, history: cmdHistory, match: cmdMatch, verify: cmdVerify };
 if (!cmd || !main[cmd]) {
-  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official> …（详见本文件头注释与 modes/scan.md）');
+  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official|history|match|verify> …（详见本文件头注释与 modes/scan.md）');
   process.exit(1);
 }
 if (cmd === 'crosscheck') await cmdCrosscheck(rest[0], rest.includes('--write'));
+else if (cmd === 'verify') {
+  const evIdx = rest.indexOf('--evidence');
+  await cmdVerify(rest[0], evIdx >= 0 ? rest[evIdx + 1] : undefined);
+}
 else if (cmd === 'detect') await cmdDetect(rest);
-else await main[cmd](rest[0]);
+else await main[cmd](rest.find((a) => !a.startsWith('--')));

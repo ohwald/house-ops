@@ -14,6 +14,9 @@
 | `node scripts/scan.mjs normalize <record.json>` | 价格单位归一 + 单价一致性检查（记录走 stdout，警告走 stderr） |
 | `node scripts/scan.mjs crosscheck <record.json> --write` | 挂牌价 vs 可比成交偏差与结论，写回 `crosscheck` 字段 |
 | `node scripts/scan.mjs official [城市]` | 列出 `templates/official-sources.cn.yml` 里该城市的政务数据源 |
+| `node scripts/scan.mjs history [关键词] [--stale-days N]` | 无参=房源实体时效表（跨平台/重挂归并）；关键词=单实体时间线与策略信号 |
+| `node scripts/scan.mjs match <record.json>` | 新扫描 vs 全库指纹匹配：识别跨平台同源挂牌与下架重挂 |
+| `node scripts/scan.mjs verify <record.json> [--evidence ev.json]` | 真实性验证判定表：URL实访/小区存在性/挂牌存在性/价格vs均价/单价一致性/满五交叉/混居判别 → provenance 建议 |
 
 ## Step 0 — 平台识别
 
@@ -26,7 +29,9 @@
 1. WebFetch 原链接，按 `fields` 清单逐字段提取，缺什么记什么，**不补全不猜测**；
 2. 反爬拦截时的降级链路：原 URL 重试一次 → 搜索快照/同源挂牌 → 请用户粘贴关键信息；
 3. 页面宣传语（"地铁上盖""学区房"）只进 `unverified_items`，不进事实字段；
-4. 挂牌字段默认档位「挂牌数据」，来源即该 URL。
+4. 挂牌字段默认档位「挂牌数据」，来源即该 URL；
+5. **真实性标记（反幻觉）**：URL 必须实际访问——重定向到首页/搜索页、或页面内容与预期房源不符 → `capture.url_verified: false`，本次采集按「未核实」处理；采集通道（webfetch/浏览器/快照/用户粘贴）与时间写入 `capture` 字段（见 `_shared.md`「来源真实性与反幻觉」节）。
+6. **真实性判定表（verify 子命令）**：AI 只负责采集证据，判定由脚本执行——证据 JSON 字段：`community_exists`（小区库命中）、`listing_seen_in_source`（真实在售列表含本标的）、`community_avg_unit_price`（小区均价）、`community_ownership`（权属口径）、`gov_parcel_evidence`（政府公示：found/parcel_use/builder/matches_subject）。判定表复刻实战案例：小区不存在→void（001）、挂牌虚构→void（008/009）、权属混合+政府公示证伪→pass（011）、未经交叉验证→suspect。`provenance_suggestion` 写入记录并同步 evaluate 的 Machine Summary。
 
 ## Step 2 — 归一化
 
@@ -34,13 +39,16 @@
 
 ### 扫描记录 schema（`house-ops.scan/1`，本节是 SoT，`scripts/scan.mjs` 按此解析）
 
+> 枚举实现源在 `scrapers/_fields.mjs`：`PAGE_TYPES`（page_type 全集）、`RELIABILITY`（可靠度四档）、`VERDICT_THRESHOLDS`（verdict 阈值）——doctor 断言本节与之一致，改枚举先改代码导出，再同步本节。
+
 ```json
 {
   "schema": "house-ops.scan/1",
   "scanned_at": "YYYY-MM-DD",
   "platform": "lianjia|beike|anjuke|5i5j|fang|generic",
-  "page_type": "listing|transaction|community|new_home|market|search|unknown",
+  "page_type": "listing|transaction|transaction_list|community|new_home|market|search|unknown",
   "url": "",
+  "capture": { "channel": "browser|webfetch|snapshot|user_paste", "captured_at": "", "url_verified": true },
   "listing_id": null,
   "city": "",
   "city_code": "",
@@ -80,10 +88,9 @@
     { "city": "", "name": "", "url": "", "metric": "", "value": "", "granularity": "", "as_of": "" }
   ],
   "crosscheck": {
-    "listing_vs_latest_deal_pct": null,
-    "vs_deal_date": "",
+    "anchor": { "tier": "", "n_samples": null, "range_pct": null },
+    "listing_vs_anchor_pct": null,
     "verdict": "",
-    "basis": "",
     "note": ""
   },
   "unverified_items": []
@@ -100,17 +107,40 @@
 
 一条成交价都拿不到：如实记录，`crosscheck` 会给出 `not_enough_data`，并把"本小区实际成交价"列入 `unverified_items`——**绝不估算成交价**。
 
-## Step 4 — 交叉验证
+## Step 4 — 交叉验证（finalizeRecord）
 
-跑 `crosscheck --write`，按 `verdict` 向用户解读：
+跑 `crosscheck --write`（= 归一化 + 交叉验证一次完成，两步顺序约定已收进模块；`normalize` 子命令仍可单独做归一化检查）。锚点方法论：
+
+- 比较口径优先**单价**（元/㎡）；挂牌缺单价才降级总价口径，并在 note 声明降级；
+- 锚点 = 最高可靠度档内、`deal_date` 最近的 **≤5 条样本的口径中位数**；`anchor.n_samples/range_pct` 随结论给出（**单样本 = 置信度低**，note 显式标注）；
+- 平台成交价脱敏（只有户型/面积/日期没有价格）时，样本无价格不参与锚点，verdict 得 `not_enough_data`——不猜测。
 
 | verdict | 含义 | 提示 |
 |---|---|---|
-| `below_deal`（≤ -10%） | 挂牌低于可比成交 | 先核实硬伤（遮挡/凶宅/税费转嫁/急售原因）再谈"捡漏" |
-| `near_deal`（-10% ~ +5%） | 贴近成交 | 定价贴合市场，议价以同小区成交为锚 |
-| `above_deal`（+5% ~ +15%） | 高于成交 | 议价空间参考此偏差与挂牌时长 |
+| `below_deal`（≤ -10%） | 挂牌低于锚点 | 先核实硬伤（遮挡/凶宅/税费转嫁/急售原因）再谈"捡漏" |
+| `near_deal`（-10% ~ +5%） | 贴近锚点 | 定价贴合市场，议价以锚点为参考 |
+| `above_deal`（+5% ~ +15%） | 高于锚点 | 议价空间参考此偏差与挂牌时长 |
 | `far_above`（> +15%） | 明显虚高 | 或成交样本过旧，需核实 |
-| `not_enough_data` | 缺可比成交 | 列入待核实，不猜测 |
+| `not_enough_data` | 缺价格可比成交 | 列入待核实，不猜测 |
+
+## Step 6 — 复查与价格历史（房东策略分析）
+
+挂牌价是房主的**要价策略**，会随时浮动；成交价滞后且与挂牌差异大。因此对同一房源的多次扫描是**追加关系，不是覆盖**：每次复查都落一个新的日期戳文件到 `data/scans/`，时间序列由脚本聚合。
+
+1. **时效提醒（进入 scan / watchlist 模式时执行）**：跑 `node scripts/scan.mjs history`——列出全部追踪房源距上次实采的天数；**默认 >14 天标记过期**（阈值可在 `modes/_custom.md` 覆盖）。有过期项时向用户提示"是否快速复扫"，**用户确认后才执行**，复扫只采变动字段（总价/调价次数/带看/在售状态）。
+2. **复查采集**：与首扫同 schema（`capture.captured_at` 更新为当天）；房源已下架/成交时在 `notes` 注明，不删旧记录。
+3. **历史解读**：`node scripts/scan.mjs history <listing_id 或小区名>` 输出时间线与摘要（价差/调价次数增量/带看增量）。解读口径——数字是脚本算的，解读是 AI 的，且必须区分事实与推断：
+   - 连续降价 + 调价次数增 → 房东以价换量/急售，议价窗口开启
+   - 长期无调价 + 高带看 → 房东心态坚定或试探市场，议价靠对比锚点
+   - 高带看 + 零成交持续 → 要价高于市场出清价，可大胆压价
+   - 下架后重挂 → 重定价信号，对比新旧挂牌价差
+4. 引用历史数据带每个时点的 `as_of`；**两个时点不构成趋势**，三次以上才可谈方向。
+5. **复扫即验证（长期可信度确认）**：每次复扫的实采证据自动跑 `verify` 判定表——provenance 随证据**可升级也可降级**（例：首次 suspect 的房源，复扫核到小区均价/政府公示后升 verified；已 verified 的房源复扫发现挂牌虚构，立即降 void 并通知用户）。provenance 的升降是长期跟踪的核心产出：**它把"这条数据可不可信"变成脚本的输出，而不是用户的负担**。
+5. **跨平台与重挂关联（房源实体）**：同一套物理房屋可能同时挂在多个平台，或下架后换平台/换经纪人重挂——挂牌 ID 变了，房子没变。规则：
+   - 房源身份以**实体指纹**判定：小区 + 建筑面积（±0.6㎡）+ 户型 + 总楼层 + 朝向 + 年代；挂牌 ID/平台/价格/核验码不是身份；
+   - 新扫描落库前跑 `node scripts/scan.mjs match <record.json>`：高置信命中 → 归并同一实体历史，报告与沟通中标注"同源挂牌"并对比各键价差；多平台同源但价差明显 → 标记**引流盘嫌疑**；
+   - 实体内某挂牌键消失 + 新键价格跳变 = **重挂重定价**信号（换壳盘常见手法：下架→加价/换经纪→重挂）；
+   - `history` 默认按实体聚合输出（一个实体 = 一套房，下挂多个挂牌键），`_custom.md` 可覆盖时效阈值。
 
 ## Step 5 — 输出
 
