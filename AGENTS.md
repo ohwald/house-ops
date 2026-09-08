@@ -1,4 +1,4 @@
-# house-ops — AI 购房决策指挥中心
+# house-ops — AI 购房搜索·汇总·分析操作台
 
 将 AI 编程 CLI 变成购房决策中枢：评估世界各地公开在售房源（优先中国大陆市场），按用户真实需求个性化打分，对高分房源深挖调研并给出沟通谈判建议。
 
@@ -30,10 +30,10 @@
 | `AGENTS.md`、`CLAUDE.md` | 总规范与 CLI 入口 |
 | `.agents/skills/house-ops/SKILL.md` | 技能路由器（`.claude/`、`.zcode/` 下为符号链接） |
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
-| `modes/*.md`（非 `_` 前缀） | 十二个工作模式 |
+| `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
 | `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段） |
-| `templates/` | 状态机 `states.yml`、政策数据表 `policy-notes.cn.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` |
+| `templates/` | 政策数据表 `policy-notes.cn.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
 
@@ -72,6 +72,18 @@
 
 ---
 
+## 反幻觉纪律：数据必须可复核（Hallucination Guard，CRITICAL）
+
+模型生成或记忆中的数据**不是事实**。混用多模型时尤其危险——幻觉最危险的形式是"编得像模像样的已核验"。任何进入报告与评分的事实，必须满足以下之一，否则一律记「未核实」且不得作为评分依据：
+
+1. **政府背书来源**（政务网站、官方公示、产调/备案凭证）→ 高概率可信，仍须标注 `as_of`；
+2. **本会话实采**（本次对话中真实抓取：WebFetch / 浏览器通道），URL 可复核、访问未被重定向或拦截导致内容失真；
+3. **用户提供的原始材料**（截图、转发链接、口述）→ 按可靠度档位如实标注。
+
+- **交叉验证门槛**：小区存在性、总价/单价/面积、对口学校、配套距离等关键字段，需 **≥2 个独立来源印证，或 1 个政府背书来源**；不满足 → 进待核实清单，不得作为评分依据。
+- **"此前会话生成过"不构成来源**：引用历史报告数据前必须重新验证。
+- **作废而非降权**：房源实体无法证实存在（小区库零命中 + URL 为占位符/重定向）→ 整份报告作废；单一板块数据无来源 → 该板块数据作废并明示。
+
 ## Main Files
 
 | 文件 | 职责 |
@@ -86,10 +98,9 @@
 | `modes/compare.md` | 2-6 套已评估房源横向对比矩阵与场景化结论 |
 | `modes/visit.md` | 带看前定制清单 + 带看后记录复盘（`data/notes/`）与增量重评 |
 | `modes/contract.md` | 认购书/买卖合同/补充协议/中介协议条款走查（配合 `templates/contract-checklist.cn.yml`） |
-| `modes/watchlist.md` | `data/watchlist.md` 的查看与状态更新 |
+| `modes/watchlist.md` | `data/watchlist.md` 候选清单的查看与备注更新 |
 | `modes/stats.md` | 找房数据统计与失分/弃购模式分析（优先跑 `scripts/stats.mjs`） |
 | `modes/doctor.md` | 环境与数据健康自检（无 AI 快速版：`node scripts/doctor.mjs`） |
-| `templates/states.yml` | 购房状态机的 canonical 状态定义 |
 | `templates/policy-notes.cn.yml` | 中国市场政策数据表（限购/税费/贷款/学区/商办/法拍等，带 as_of，用前核实） |
 | `templates/contract-checklist.cn.yml` | 交易文件条款走查清单（contract 模式用） |
 | `templates/official-sources.cn.yml` | 各城市政务房地产公开数据源登记表（scan 模式交叉验证用） |
@@ -97,7 +108,7 @@
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
-| `scripts/lib/data.mjs` | stats/dashboard 共享数据解析层（报告/watchlist/状态机） |
+| `scripts/lib/data.mjs` | stats/dashboard/map 共享数据解析层（报告/watchlist） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
 | `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件 HTML `data/map.html` 或启动 `--serve` 本地服务，支持高德地图、通勤圈、筛选与画像保存；零外部依赖） |
 
@@ -122,7 +133,7 @@
 | "对比 001 003"、"这几套哪个好" | `compare` |
 | "我看完房了"、"记录带看"、"准备去看 002" | `visit` |
 | "帮我看看合同/认购书/补充协议"（+粘贴条款） | `contract` |
-| "我的清单"、"看房进度"、"更新 005 状态为已看房" | `watchlist` |
+| "我的清单"、"候选列表"、"更新 005 的备注" | `watchlist` |
 | "统计一下"、"我的找房数据"、"失分分析" | `stats` |
 | "在地图上看"、"地图决策"、"房源分布"、"生成地图" | `map`（优先跑 `node scripts/map.mjs --serve` 或 `scripts/map.mjs`） |
 | "自检/体检"、"哪里配置有问题" | `doctor` |
@@ -150,9 +161,11 @@
 
 ## Pipeline Integrity
 
-- `data/watchlist.md` 是关注清单唯一 SoT：每条房源一行，状态必须取自 `templates/states.yml` 的 canonical 名称（可带其别名输入，落库必须转 canonical）。更新时整行替换，不改其他行。
+- `data/watchlist.md` 是关注清单唯一 SoT：每条房源一行，**纯候选清单、无状态列**（不做交易状态跟踪，决策记录见 `docs/adr/0001`）；看过与否、弃购原因等事实写在备注。更新时整行替换，不改其他行。
 - 报告头部必须包含：`编号 / 日期 / 房源名称与地址 / URL / 类型 / 总价 / 单价 / Global 评分 / 结论`。
 - 评估完成必须同步登记 watchlist（新房源新增行；已存在的更新评分与状态），失败时告知用户。
 - `data/notes/` 下带看记录（`{NNN}-visit-{日期}.md`）与合同审查记录（`{NNN}-contract-{日期}.md`）是事实记录，只追加不改写历史条目；增量重评在原报告追加 `## 增量重评` 节，不覆盖原文。
 - 报告编号只能经 `scripts/reserve-report-num.mjs`（或等价的手动 max+1）分配，不得凭空指定。
 - 扫描记录（scan 模式）落 `data/scans/`，schema `house-ops.scan/1`（SoT：`modes/scan.md`）：不占报告编号、不登记 watchlist；evaluate / deep-dive / negotiate 引用扫描记录时必须带 as_of 与可靠度档位。
+- 扫描记录是**追加式历史**：同一房源多次扫描落多个日期戳文件，禁止覆盖/改写旧记录——价格、调价、带看的时间序列是分析房东定价策略的依据（`node scripts/scan.mjs history`）。用户间隔较久回来时（默认 >14 天，`modes/_custom.md` 可覆盖），scan/watchlist 模式须提示是否快速复扫在追踪房源；过期挂牌价不得当作当前价引用。
+- **房源实体按指纹关联**（小区+面积±0.6㎡+户型+总楼层+朝向+年代，`scan.mjs match`）：跨平台同源挂牌与下架重挂必须归并到同一实体历史下，禁止按挂牌 ID 孤立追踪——换平台重挂/多平台差价是房东常见策略（重定价/引流），系统要能看见。

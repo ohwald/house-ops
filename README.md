@@ -1,83 +1,107 @@
 # house-ops
 
-**AI 购房决策指挥中心**：把你的 AI 编程 CLI（ZCode / Claude Code 等）变成购房顾问——评估世界各地公开在售房源（优先中国大陆市场），按**你的真实需求**个性化打分，对高分房源深挖调研，并给出沟通谈判建议。
+> 跑在 AI CLI（ZCode / Claude Code / Cursor…）里的**购房搜索·汇总·分析操作台**：
+> 扫描主流平台的真实在售房源，交叉验证数据真实性，汇总为结构化档案与评级报告。
+> AI 负责搜索、汇总、分析；看房、谈判、拍板，始终是你。
 
-设计参考 [career-ops](https://github.com/career-ops-hq/career-ops)（求职指挥中心），把"过滤职位而非海投"的理念搬到购房：**聚焦而非看遍所有房**。
+设计参考 [career-ops](https://github.com/career-ops-hq/career-ops)：ops = 操作中心——一套可执行、可复跑、越用越准的购房操作流程。
 
-## 理念
+![房源决策地图](docs/screenshots/map.jpg)
 
-- **过滤而非看遍**：不给 Global < 3.5 的房源花时间；≥ 4.5 才值得全力推进。看房时间是你最稀缺的资源。
-- **人在回路**：AI 只评估、推荐、起草话术，**绝不代替你联系中介、承诺价格、签任何东西、碰任何钱**。所有决策与行动永远由你完成。
-- **证据优先**：成交价、税费、学区、政策一律标注来源与可靠度档位（成交数据 > 挂牌数据 > 中介口述 > 未核实）；宣传语不采信。
-- **本地运行**：数据是你自己的 Markdown/YAML 文件；个人数据不入 git。
+## 它解决什么问题
 
-## 十二个模式
+买过房的人都知道：平台挂牌价是**策略**不是事实，中介话术是**营销**不是信息，AI 直接生成的"评估报告"更可能是**幻觉**（本项目吃过亏：某次会话生成的 10 份报告里，小区不存在、挂牌价打 7 折、连用户画像都被改了）。house-ops 用四条纪律应对：
 
-| 模式 | 用途 |
+- **反幻觉**——AI 生成或记忆中的数据不是事实。关键数字必须带来源标记（`[实采]`/`[政务]`/`[用户提供]`/`[未核实]`）；小区不存在、挂牌虚构的报告直接作废，而非降权。
+- **交叉验证**——小区存在性、挂牌存在性、价格 vs 均价、满五与上次交易、回迁混居（政府公示判别），七项判定表由脚本机械执行，`provenance` 三态（`verified / suspect / void`）写入每条记录。
+- **证据分档**——成交数据 > 挂牌数据 > 中介口述 > 未核实；平台脱敏成交价后，用价格锚点阶梯与流动性信号（带看/在售/去化）替代。
+- **过滤而非看遍**——硬性 DQ（预算/电梯/混居/学位占用）一票封顶；评分分档决定哪里值得花看房时间。
+
+## 工作流：一个购房周期
+
+```
+intake 建画像 → App 刷到候选 → triage 速筛 → scan 验真+采价
+→ evaluate 评级 → deep-dive 深挖 → compare 对比 → visit 带看清单
+→ negotiate 谈判 → contract 审合同 → watchlist/stats 复盘
+```
+
+| 模式 | 干什么 |
 |---|---|
-| `/house-ops intake` | 多轮对话明确购房需求：预算/城市/资格 + **家庭结构**（孩子年龄与入学时间线、老人照护、特殊需求）→ 自动翻译成评估衍生需求与硬性 DQ 规则 |
-| `/house-ops triage` | 60 秒速筛：只对照简版画像三问（预算/位置/红线），省 token |
-| `/house-ops scan` | 平台扫描：识别贝壳/链家/安居客/我爱我家/房天下等链接，采集挂牌价与成交价，政务公开数据交叉验证（记录落 `data/scans/`，供评估引用） |
-| `/house-ops evaluate` | 粘贴房源链接或描述 → 六维评级报告（需求匹配/价格/地段/本体/风险 + Global） |
-| `/house-ops deep-dive` | 高分房源（≥4.0）六轴深挖：价格历史/周边环境/本地政策/竞品/交易安全/生活圈 |
-| `/house-ops compare` | 2-6 套已评估房源横向对比矩阵 + 场景化结论（预算优先选谁、学区优先选谁） |
-| `/house-ops visit` | 带看前生成定制核查清单；带看后记录复盘并触发增量重评 |
-| `/house-ops negotiate` | 高分房源：向房东/中介的核实清单、议价空间分析、分轮报价策略、沟通话术草稿 |
-| `/house-ops contract` | 审认购书/买卖合同/补充协议/中介协议：13 条走查清单 + 红旗识别 + 修改建议 |
-| `/house-ops watchlist` | 关注清单与看房进度跟踪（关注→已评估→已看房→谈判中→已认购→网签→已过户/弃购） |
-| `/house-ops stats` | 找房数据统计：分数分布、板块分布、失分模式、弃购原因排行 |
-| `/house-ops doctor` | 仓库结构与数据健康自检（也有无 AI 快速版 `npm run doctor`） |
+| `/house-ops intake` | 多轮对话建画像：预算/家庭结构/入学时间线 → 翻译成衍生需求与硬性 DQ |
+| `/house-ops triage` | 60 秒速筛：只对照画像三问 |
+| `/house-ops scan` | **平台扫描**：识别链接、采集挂牌字段、验真、采成交锚点、跨平台查重、记录调价历史 |
+| `/house-ops evaluate` | 六维分析报告：需求匹配/价格/地段/本体/风险 + Global，关键数字全部带来源标记 |
+| `/house-ops deep-dive` | 高分房源六轴深挖：价格历史/嫌恶设施/政策/竞品/交易安全/生活圈 |
+| `/house-ops compare` | 多盘横向矩阵 + 场景化推演（预算优先选谁、学区优先选谁） |
+| `/house-ops visit` | 带看前定制核查清单（噪音实测/采光时段/话术反查），带看后复盘 |
+| `/house-ops negotiate` | 核实清单 + 议价空间（以成交锚点为依据）+ 分轮报价 + 话术草稿 |
+| `/house-ops contract` | 认购书/买卖合同 13 条走查 + 红旗识别 |
+| `/house-ops watchlist` | 候选清单：评分/风险/备注一览（真实性三态标记，作废房源自动隐藏） |
+| `/house-ops stats` | 失分/弃购分析：分数分布、板块分布、真实性存疑提示 |
+| `/house-ops map` | 房源决策地图：按坐标上图，通勤圈、决策过滤、详情卡 |
+| `/house-ops doctor` | 仓库结构与数据健康自检（无 AI 快速版 `npm run doctor`） |
 
-评分分档：**≥4.5 强烈推荐**（立即深挖+谈判准备）｜**4.0–4.4 值得看房**｜**3.5–3.9 有特定理由才看**｜**<3.5 建议放弃**。预算超限、城市不符、无电梯+行动不便老人等硬性 DQ 命中直接封顶 2.5。
+评分分档：**≥4.5 强烈推荐**｜**4.0–4.4 值得看房**｜**3.5–3.9 有特定理由才看**｜**<3.5 建议放弃**。硬性 DQ 命中直接封顶 2.5。
+
+## 真实性体系（最大差异点）
+
+房源数据是幻觉重灾区。本项目把"这条数据可不可信"变成**脚本的输出，而不是用户的负担**：
+
+- **采集留痕**——每条扫描记录带 `capture`（通道/时间/URL 是否实访验证）
+- **指纹查重**——同一套房 = 小区+面积±0.6㎡+户型+楼层+朝向+年代；跨平台重挂、换壳盘、多平台差价自动归并现形
+- **判定表执行**——`scan.mjs verify` 对七项检查（URL 实访/小区存在性/挂牌存在性/价格 vs 均价/单价一致性/满五交叉/回迁混居）逐项判定，判例直接复刻自真实事故
+- **政府公示判别**——回迁混居不看平台标签，看规资局土地出让与规划公示的**建设单位**（曾借此识别"低于均价 15%"实为混居社区结构性折价）
+- **强约束过滤**——作废数据在共享数据层默认不可见，所有消费入口（报告/清单/统计/仪表盘/地图）自动继承，无需人工核对
+- **追加式价格历史**——同一房源多次扫描自动聚合：降价+调价频发=以价换量，高带看+零成交=有价无市，房东策略看得见
+
+## 平台支持
+
+| 平台 | 挂牌采集 | 成交明细 |
+|---|---|---|
+| 贝壳找房 / 链家 | ✅ | ✅ `/chengjiao/`（成交数据档） |
+| 安居客 / 我爱我家 / 房天下 | ✅ | ❌ 仅估算行情（自动降档，宁降档不虚标） |
+| 其他平台 | generic 兜底清单 | 按通用清单采集 |
+
+> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发数据。
 
 ## 快速开始
 
 ```bash
-# 1. 克隆到本地
 git clone https://github.com/ohwald/house-ops.git
 cd house-ops
-
-# 2. 用你的 AI CLI 打开本目录（ZCode / Claude Code 均可）
-
-# 3. 首次使用：多轮对话建立需求画像
-/house-ops intake
-
-# 4. 之后：直接粘贴一条房源链接（链家/贝壳/安居客/中原等），自动走评估流程
+# 用你的 AI CLI 打开本目录，然后：
+/house-ops intake          # 3 分钟建立需求画像
+# 之后直接粘贴房源链接即可
 ```
 
-无需安装任何依赖即可使用全部功能——本仓库没有应用代码，只有 Markdown 指令体系、YAML 配置与数据表，AI CLI 本身就是运行时。唯一可选的安装是终端仪表盘：`npm install` 后运行 `npm run dashboard`（Ink TUI：清单表格/进度漏斗/分数分布/Top 房源，`r` 刷新 `q` 退出；管道环境下自动降级为单帧纯文本）。
+- **零依赖**：无应用代码，AI CLI 就是运行时；脚本层纯 Node ≥18 内置模块
+- **可选增强**：`npm install` 后可用 `npm run dashboard`（终端操作台：清单/评分分布，Enter 在地图中定位房源）与 `npm run map:serve`（房源决策地图）
 
-## 目录结构
+## 架构
 
 ```
-house-ops/
-├── AGENTS.md            # 总规范：数据契约、评分路由、全局规则（所有 CLI 共读）
-├── modes/               # "大脑"：一个 .md 一个工作流
-│   ├── _shared.md       #   评分体系、配套分级参考、小区软素质信号（系统层）
-│   ├── _profile.md      #   你的画像语义层（gitignore，含家庭结构衍生需求）
-│   ├── _brief.md        #   速筛用简版画像（gitignore）
-│   └── intake / triage / evaluate / scan / deep-dive / compare /
-│       visit / negotiate / contract / watchlist / stats / doctor
-├── .agents/skills/house-ops/SKILL.md   # 技能路由器（.claude/ .zcode/ 为符号链接）
-├── config/profile.example.yml          # 需求画像模板 → 复制为 profile.yml（gitignore）
-├── templates/states.yml                # 购房状态机
-├── templates/policy-notes.cn.yml       # 中国政策数据表（限购/税费/贷款/学区/商办/法拍，带 as_of）
-├── templates/contract-checklist.cn.yml # 交易合同 13 条走查清单
-├── templates/official-sources.cn.yml   # 政务房地产公开数据源登记（scan 交叉验证用，带 as_of）
-├── scrapers/*.mjs                      # 平台扫描模板：贝壳/链家/安居客/我爱我家/房天下（一平台一模块，career-ops provider 模式）
-├── scripts/*.mjs        # 确定性脚本：编号原子分配 / doctor / stats / scan / Ink TUI dashboard
-├── scripts/lib/data.mjs # stats 与 dashboard 共享的数据解析层
-├── data/                  # watchlist.md、notes/ 带看记录、scans/ 扫描记录（gitignore）
-└── reports/               # 评估报告（gitignore）
+├── AGENTS.md            # 总规范：数据契约/路由/反幻觉纪律（所有 CLI 共读）
+├── modes/*.md           # 大脑：13 个工作流，一个文件一个模式
+├── scrapers/*.mjs       # 平台扫描模板：一平台一模块 + 文件系统注册表
+├── scripts/*.mjs        # 确定性脚本：scan（detect/verify/match/history/crosscheck）
+│                        #   / stats / doctor / dashboard / map（零依赖，Node ≥18）
+├── scripts/selftest.mjs # 扫描层 golden 测试（52 项）
+├── templates/*.yml      # 政策表 / 合同清单 / 政务数据源登记（全部带 as_of）
+├── docs/adr/            # 架构决策记录
+├── data/ reports/       # 你的运行时数据（gitignore）
 ```
 
-## 数据契约
+**数据契约**：系统层（入库，可升级）与用户层（gitignore，只属于你）严格分离。需求变了重跑 `intake`；个性化规则写进 `_custom.md`。
 
-- **系统层**（入库）：`AGENTS.md`、`modes/_shared.md`、各模式文件、`templates/`、`config/profile.example.yml`。
-- **用户层**（gitignore，只属于你）：`config/profile.yml`、`modes/_profile.md`、`modes/_custom.md`、`data/`、`reports/`。
+## 设计决策
 
-需求变了 → 再跑 `/house-ops intake`；想覆盖默认评分口径/流程 → 写进 `modes/_custom.md`（直接让 AI 帮你改）。
+- [ADR-0001](docs/adr/0001-no-transaction-status-tracking.md) 不做交易状态跟踪（无状态机、无进度漏斗）
+- [ADR-0002](docs/adr/0002-data-provenance-verification.md) 数据真实性门槛（模型记忆不作为事实来源；provenance 过滤是强约束）
 
 ## 免责声明
 
 house-ops 输出为 AI 生成的分析参考，不构成投资、法律或税务建议。重大交易请自行核实产权与政策（各数据表均标注 as_of），必要时咨询专业人士。
+
+## 致谢
+
+[career-ops](https://github.com/career-ops-hq/career-ops) —— "把 AI CLI 变成生活操作中枢"的原始范式。

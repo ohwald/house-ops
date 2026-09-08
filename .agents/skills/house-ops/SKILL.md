@@ -1,7 +1,7 @@
 ---
 name: house-ops
 description: >-
-  AI 购房决策指挥中心——多轮对话明确购房需求（预算/孩子年龄/老人照护/特殊需求），
+  AI 购房搜索·汇总·分析操作台——多轮对话明确购房需求（预算/孩子年龄/老人照护/特殊需求），
   对公开在售房源（优先中国大陆）做个性化评级打分，速筛、扫描房源采集挂牌/成交价、
   多盘对比、深挖高分房源
   （历史价格/周边环境/本地政策），审合同条款，并给出沟通谈判建议。
@@ -44,6 +44,7 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 | `watchlist`（别名：清单、跟踪、tracker） | `modes/watchlist.md` |
 | `stats`（别名：统计、数据、分析） | `modes/stats.md` |
 | `doctor`（别名：自检、体检、诊断） | `modes/doctor.md` |
+| `map`（别名：地图、在地图上看、房源分布） | `modes/map.md` |
 | 空 | Discovery 菜单 |
 | 非命令但内容像房源（含 URL、小区名+价格等） | `modes/evaluate.md` |
 
@@ -56,7 +57,7 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 ## Discovery 菜单
 
 ```
-house-ops — AI 购房决策指挥中心
+house-ops — AI 购房搜索·汇总·分析操作台
 
   /house-ops intake      多轮对话明确你的购房需求，生成需求画像（首次使用先跑这个）
   /house-ops triage      60 秒速筛：粘贴链接快速判断值不值得完整评估
@@ -67,7 +68,8 @@ house-ops — AI 购房决策指挥中心
   /house-ops visit       带看前定制核查清单 / 带看后记录复盘
   /house-ops negotiate   高分房源的核实清单、议价策略与沟通话术
   /house-ops contract    审认购书/买卖合同/补充协议/中介协议条款
-  /house-ops watchlist   查看/更新关注清单与看房进度
+  /house-ops watchlist   查看/更新候选清单与备注
+  /house-ops map        房源决策地图：已评估房源按坐标上图，通勤圈与详情卡
   /house-ops stats       找房数据统计与失分/弃购模式分析
   /house-ops doctor      仓库结构与数据健康自检
 
@@ -84,7 +86,6 @@ house-ops — AI 购房决策指挥中心
    - `compare`/`visit`/`contract`：读 `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件 + 相关房源报告。
 2. **其他**（`intake`、`watchlist`、`stats`、`doctor`）：读 `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件。
 3. 任何模式涉及**中国政策事实**（限购/税费/利率/学区/商办/法拍）时，读 `templates/policy-notes.cn.yml` 并遵守其"用前联网核实"规则；`contract` 另读 `templates/contract-checklist.cn.yml`。
-4. `watchlist`、`evaluate`、`visit`、`compare` 还需读 `templates/states.yml` 以获取 canonical 状态名。
 5. `stats` 优先跑 `node scripts/stats.mjs`，失败或需要更深解读时按 mode 文件人工汇总。
 6. `scan`：只读 `modes/scan.md`；先跑 `node scripts/scan.mjs detect <url>` 获取平台与字段清单；涉及成交价/政务数据时读 `templates/official-sources.cn.yml`（用前联网核实）；可靠度档位以 `modes/_shared.md`「数据可靠度四档」节为准。
 
