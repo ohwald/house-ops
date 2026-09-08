@@ -6,6 +6,7 @@
 import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCAN_SCHEMA, PAGE_TYPES, RELIABILITY } from '../scrapers/_fields.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -22,7 +23,7 @@ const sysFiles = [
   'modes/deep-dive.md', 'modes/negotiate.md', 'modes/watchlist.md',
   'modes/triage.md', 'modes/compare.md', 'modes/visit.md',
   'modes/contract.md', 'modes/doctor.md', 'modes/stats.md', 'modes/scan.md',
-  'templates/states.yml', 'templates/policy-notes.cn.yml',
+  'templates/policy-notes.cn.yml',
   'templates/contract-checklist.cn.yml', 'templates/official-sources.cn.yml',
   'config/profile.example.yml',
   'package.json',
@@ -59,14 +60,12 @@ const watchlistPath = join(root, 'data/watchlist.md');
 let orphanRows = [];
 if (await exists(watchlistPath)) {
   const lines = (await readFile(watchlistPath, 'utf8')).split('\n');
-  const canonical = new Set(['关注','已评估','已约看','已看房','谈判中','已认购','网签','已过户','弃购','暂缓']);
   for (const line of lines) {
     if (!line.startsWith('|') || line.includes('---') || line.includes('编号')) continue;
     const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-    const no = cells[0], state = cells[7];
+    const no = cells[0];
     if (no && !/^\d{3}$/.test(no)) continue;
     if (no && !reportNums.has(no)) orphanRows.push(`${no}（无对应报告）`);
-    if (no && state && !canonical.has(state)) orphanRows.push(`${no}（非法状态: ${state}）`);
   }
   check(orphanRows.length ? 'warn' : 'pass', 'watchlist 一致性',
     orphanRows.length ? `异常行: ${orphanRows.join('; ')}` : 'watchlist 与报告编号/状态一致');
@@ -84,6 +83,20 @@ try {
       ageDays > 90 ? `as_of 已 ${ageDays} 天，建议核实更新` : `as_of ${ageDays} 天内`);
   }
 } catch {}
+
+// 6. scan schema 一致性：modes/scan.md（SoT 文本）与 _fields.mjs 导出的枚举断言
+try {
+  const scanDoc = await readFile(join(root, 'modes/scan.md'), 'utf8');
+  const missing = [
+    SCAN_SCHEMA,
+    ...PAGE_TYPES,
+    ...RELIABILITY,
+  ].filter((token) => !scanDoc.includes(token));
+  check(missing.length ? 'fail' : 'pass', 'scan schema 一致性（scan.md ↔ _fields.mjs）',
+    missing.length ? `scan.md 缺少 schema token: ${missing.join(', ')}` : '');
+} catch (err) {
+  check('fail', 'scan schema 一致性', `读取失败: ${err.message}`);
+}
 
 // 汇总输出
 let fails = 0, warns = 0;

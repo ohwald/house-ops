@@ -9,9 +9,13 @@ import { fileURLToPath } from 'node:url';
 import { collectReports } from './lib/data.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
-const rows = await collectReports(join(root, 'reports'));
+const all = await collectReports(join(root, 'reports'), { includeVoid: true });
+// 真实性过滤（ADR-0002）：void（作废/虚构）不参与任何统计；suspect（存疑）保留但显式标记
+const voidRows = all.filter(r => r.provenance === 'void');
+const rows = all.filter(r => r.provenance !== 'void');
+const suspectCount = rows.filter(r => r.provenance === 'suspect').length;
 
-if (!rows.length) {
+if (!rows.length && !voidRows.length) {
   console.log('reports/ 下没有可解析 Machine Summary 的报告。');
   process.exit(0);
 }
@@ -31,7 +35,8 @@ for (const r of rows) {
   }
 }
 
-console.log(`已评估: ${rows.length} 套`);
+console.log(`评估报告: ${rows.length} 份${voidRows.length ? `（另有 ${voidRows.length} 份已作废，不参与统计）` : ''}`);
+if (suspectCount) console.log(`⚠️  真实性存疑: ${suspectCount} 套（数据未实采核验，结论仅供参考）`);
 console.log(`Global 均分: ${avg}（最高 ${scores.length ? Math.max(...scores).toFixed(1) : '—'}，最低 ${scores.length ? Math.min(...scores).toFixed(1) : '—'}）`);
 console.log('结论分布:', JSON.stringify(byConclusion, null, 2));
 

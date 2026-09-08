@@ -1,21 +1,20 @@
 #!/usr/bin/env node
-// dashboard.mjs — Ink TUI 购房决策中枢仪表盘 (支持高交互光标/详情翻页/打开原网页/状态流转)
+// dashboard.mjs — Ink TUI 购房决策中枢仪表盘 (支持高交互光标/详情翻页/打开原网页/地图深链)
 // 用法: node scripts/dashboard.mjs [PROJECT_ROOT]   （或 npm run dashboard）
 // 交互快捷键:
 //   ↑ / ↓ (或 k / j): 上下选择房源
-//   Enter: 查看选定房源的深度评估报告
+//   Enter 或 m: 在浏览器中打开房源地图并定位到选定房源（服务未启动时自动后台拉起）
+//   i: 查看选定房源的深度评估报告（内嵌滚动视图）
 //   o: 在浏览器中打开挂牌原网页 (若无则打开报告文件)
-//   s: 变更选定房源的跟踪状态 (直接更新 data/watchlist.md)
-//   m: 在浏览器中打开房源决策地图 (http://localhost:3000)
-//   r: 刷新数据
-//   q / Esc: 退出程序或返回主列表
+//   p: 切换排序 · r: 刷新数据 · q / Esc: 退出程序或返回主列表
+// （交易状态跟踪已移除，见 docs/adr/0001——watchlist 为纯候选清单，备注即事实）
 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exec } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
 import React, { useState, useEffect } from 'react';
 import { render, Text, Box, Static, useInput, useApp } from 'ink';
-import { collectReports, parseWatchlist, readStates, readReportDetail, updateWatchlistState } from './lib/data.mjs';
+import { collectReports, parseWatchlist, readReportDetail } from './lib/data.mjs';
 
 const h = React.createElement;
 const ROOT = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,6 +24,40 @@ function openExternal(target) {
   if (!target) return;
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
   exec(`${cmd} "${String(target).replace(/"/g, '\\"')}"`);
+}
+
+// ---------- 地图服务：健康检查 + 自动拉起 + 深链 ----------
+const MAP_PORT = 3000;
+async function mapServerHealthy() {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 800);
+    const res = await fetch(`http://127.0.0.1:${MAP_PORT}/api/data`, { signal: ctl.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch { return false; }
+}
+
+// 若地图服务未运行则后台拉起（detached，不随 TUI 退出），随后打开浏览器深链到具体房源
+async function openMapForHouse(house, notify = () => {}) {
+  notify(house ? `🗺️ 正在地图中定位 ${house.no} ${house.community}…` : '🗺️ 正在打开房源地图…');
+  if (!(await mapServerHealthy())) {
+    notify('🚀 首次使用：正在后台启动地图服务…', 2000);
+    spawn(process.execPath, [join(ROOT, 'scripts', 'map.mjs'), '--serve'], {
+      detached: true, stdio: 'ignore',
+    }).unref();
+    let up = false;
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 400));
+      if (await mapServerHealthy()) { up = true; break; }
+    }
+    if (!up) {
+      notify('❌ 地图服务启动失败——可手动运行 npm run map:serve 查看');
+      return;
+    }
+  }
+  const q = house?.no ? `?house=${encodeURIComponent(house.no)}` : '';
+  openExternal(`http://localhost:${MAP_PORT}/${q}`);
 }
 
 // ---------- CJK 视觉宽度工具 ----------
@@ -41,16 +74,29 @@ const trunc = (s, w) => {
 
 // ---------- 数据加载 ----------
 async function loadData() {
-  const [reports, watchlist, states] = await Promise.all([
+  const [reports, watchlist] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
-    readStates(join(ROOT, 'templates', 'states.yml')),
   ]);
   const reportMap = new Map();
   for (const r of reports) {
     if (r.report_no) reportMap.set(String(r.report_no).padStart(3, '0'), r);
   }
-  return { reports, watchlist: watchlist ?? [], states, reportMap, loadedAt: new Date() };
+
+  // 默认按综合评分降序排序（高分在先）；同分按编号升序；无评分靠后
+  const sortedWatchlist = [...(watchlist ?? [])].sort((a, b) => {
+    const sa = num(a.score);
+    const sb = num(b.score);
+    if (sa != null && sb != null) {
+      if (sb !== sa) return sb - sa;
+      return String(a.no).localeCompare(String(b.no));
+    }
+    if (sa != null) return -1;
+    if (sb != null) return 1;
+    return String(a.no).localeCompare(String(b.no));
+  });
+
+  return { reports, watchlist: sortedWatchlist, reportMap, loadedAt: new Date() };
 }
 
 // ---------- 样式与辅助 ----------
@@ -58,7 +104,6 @@ const num = s => { const v = parseFloat(s); return Number.isFinite(v) ? v : null
 const scoreColor = s => (s == null ? 'gray' : s >= 4 ? 'green' : s >= 3.5 ? 'yellow' : 'red');
 const riskColor = r => ({ low: 'green', caution: 'yellow', 注意: 'yellow', high: 'red', 高风险: 'red' }[r] ?? 'gray');
 const CONCLUSION_LABEL = { strong_buy: '强推', worth_viewing: '值得看', conditional: '看情况', pass: '放弃' };
-const TERMINAL_STATES = new Set(['已过户', '弃购']);
 
 const dim = (s, key) => h(Text, { key, color: 'gray' }, s);
 function sectionTitle(title) {
@@ -67,9 +112,9 @@ function sectionTitle(title) {
 
 // ---------- 关注清单表格 (带光标指示与高亮) ----------
 const COLS = [
-  ['编号', 6], ['小区/项目', 16], ['板块', 12], ['总价万', 8], ['Global', 9], ['风险', 9], ['状态', 8],
+  ['编号', 6], ['小区/项目', 16], ['板块', 12], ['总价万', 8], ['评分', 8], ['风险', 8],
 ];
-const ROW = [r => r.no, r => r.community, r => r.district, r => r.price, r => r.score, r => r.risk, r => r.state];
+const ROW = [r => r.no, r => r.community, r => r.district, r => r.price, r => r.score, r => r.risk];
 
 function WatchTable({ rows, selectedIndex }) {
   const header = h(Box, { key: 'h' }, [
@@ -89,13 +134,14 @@ function WatchTable({ rows, selectedIndex }) {
         const raw = ROW[i](r);
         let color = i === 4 ? scoreColor(num(r.score))
           : i === 5 ? riskColor(String(r.risk ?? '').trim())
-          : TERMINAL_STATES.has(r.state) ? 'gray' : undefined;
+          : undefined;
 
         if (isSelected && i <= 3) {
           color = 'cyan';
         }
         return h(Box, { key: name, width: w },
-          h(Text, { bold: isSelected, color, underline: isSelected && i === 1 }, pad(trunc(raw, w - 2), w)));
+          h(Text, { bold: isSelected, color, underline: isSelected && i === 1, dimColor: r.authenticity === 'void' },
+            pad(trunc((i === 0 && r.authenticity === 'suspect' ? '⚠ ' : i === 0 && r.authenticity === 'void' ? '⛔ ' : '') + raw, w - 2), w)));
       })
     ]);
   });
@@ -122,17 +168,6 @@ function Histogram({ scores }) {
   }));
 }
 
-// ---------- 进度漏斗 ----------
-function Funnel({ watchlist, states }) {
-  const parts = [];
-  states.forEach((s, i) => {
-    const n = watchlist.filter(r => r.state === s).length;
-    if (i > 0) parts.push(dim(' → ', `sep${i}`));
-    parts.push(h(Text, { key: s, color: n ? undefined : 'gray' }, `${s} ${n}`));
-  });
-  return h(Box, { flexWrap: 'wrap' }, parts);
-}
-
 // ---------- 报告详情视图 (Report Viewer) ----------
 function ReportViewer({ reportDetail, reportMeta, scrollOffset, totalLines }) {
   if (!reportDetail) {
@@ -153,9 +188,8 @@ function ReportViewer({ reportDetail, reportMeta, scrollOffset, totalLines }) {
     h(Box, { key: 'head', marginBottom: 1, borderStyle: 'round', borderColor: 'cyan', paddingX: 1, flexDirection: 'column' }, [
       h(Box, { key: 'info' }, [
         h(Text, { key: 't', bold: true, color: 'cyan' }, `📄 深度评估报告 · ${reportMeta?.no ?? '???'} ${reportMeta?.community ?? ''}  `),
-        h(Text, { key: 's', color: scoreColor(num(reportMeta?.score)) }, `Global: ${reportMeta?.score ?? '—'}  `),
-        h(Text, { key: 'r', color: riskColor(reportMeta?.risk) }, `风险: ${reportMeta?.risk ?? '—'}  `),
-        dim(`状态: ${reportMeta?.state ?? '—'}`, 'st')
+        h(Text, { key: 's', color: scoreColor(num(reportMeta?.score)) }, `综合评分: ${reportMeta?.score ?? '—'}  `),
+        h(Text, { key: 'r', color: riskColor(reportMeta?.risk) }, `风险: ${reportMeta?.risk ?? '—'}  `)
       ]),
       reportDetail.url ? h(Text, { key: 'url', color: 'gray' }, `🔗 挂牌链接: ${reportDetail.url}`) : null
     ]),
@@ -177,73 +211,47 @@ function ReportViewer({ reportDetail, reportMeta, scrollOffset, totalLines }) {
     // 滚动与操作指示
     h(Box, { key: 'nav', marginTop: 1, borderStyle: 'single', borderColor: 'gray', paddingX: 1 }, [
       h(Text, { key: 'pg', color: 'green' }, `[第 ${currentScroll + 1}-${Math.min(lines.length, currentScroll + visibleCount)} 行 / 共 ${lines.length} 行] `),
-      h(Text, { key: 'hlp', bold: true }, '↑/↓: 滚动 · o: 打开原网页 · Esc / q / Backspace: 返回列表')
+      h(Text, { key: 'hlp', bold: true }, '↑/↓: 滚动 · m: 地图定位 · o: 打开原网页 · Esc / q: 返回列表')
     ])
   ]);
 }
 
-// ---------- 状态选择弹窗 (Status Picker) ----------
-function StatusPicker({ states, currentStatus, selectedStatusIndex, houseName }) {
-  return h(Box, {
-    flexDirection: 'column',
-    borderStyle: 'double',
-    borderColor: 'yellow',
-    padding: 1,
-    marginTop: 1,
-    marginBottom: 1,
-    width: 60
-  }, [
-    h(Text, { bold: true, color: 'yellow' }, `🔄 变更房源状态: ${houseName}`),
-    dim(`当前状态: [${currentStatus}]  (按 ↑/↓ 选择新状态，Enter 确认，Esc 取消)`),
-    h(Box, { flexDirection: 'column', marginTop: 1 },
-      states.map((s, idx) => {
-        const isSelected = idx === selectedStatusIndex;
-        const isCurrent = s === currentStatus;
-        return h(Box, { key: s }, [
-          h(Text, { bold: isSelected, color: isSelected ? 'cyan' : undefined }, isSelected ? ' ▶ ' : '   '),
-          h(Text, { bold: isSelected, color: isSelected ? 'cyan' : isCurrent ? 'green' : undefined },
-            `${s}${isCurrent ? ' (当前)' : ''}`)
-        ]);
-      })
-    )
-  ]);
-}
-
 // ---------- 主控制台视图 (List View) ----------
-function MainView({ data, selectedIndex, flashMessage }) {
-  if (!data) return dim(' 载入中…');
-  const { reports, watchlist, states, loadedAt } = data;
-  const date = `${loadedAt.getFullYear()}-${String(loadedAt.getMonth() + 1).padStart(2, '0')}-${String(loadedAt.getDate()).padStart(2, '0')}`;
-  const scores = reports.map(r => num(r.score_global)).filter(v => v != null);
+function MainView({ data, selectedIndex, flashMessage, sortMode = 'score' }) {
+  if (!data || !data.loadedAt) return dim(' 载入中…');
+  const { reports = [], watchlist = [], loadedAt } = data;
+  const date = loadedAt instanceof Date
+    ? `${loadedAt.getFullYear()}-${String(loadedAt.getMonth() + 1).padStart(2, '0')}-${String(loadedAt.getDate()).padStart(2, '0')}`
+    : new Date().toISOString().slice(0, 10);
+  const validReports = reports.filter(r => r.provenance !== 'void');
+  const scores = validReports.map(r => num(r.score_global)).filter(v => v != null);
   const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '—';
-  const top = [...reports].sort((a, b) => (num(b.score_global) ?? 0) - (num(a.score_global) ?? 0)).slice(0, 3);
+  const top = [...validReports].sort((a, b) => (num(b.score_global) ?? 0) - (num(a.score_global) ?? 0)).slice(0, 3);
+  const sortLabels = { score: '按综合评分高→低', no: '按编号顺序', price: '按总价低→高' };
 
   return h(Box, { flexDirection: 'column' }, [
     h(Box, { key: 'head', marginBottom: 1 },
-      h(Text, { bold: true, color: 'magenta' }, 'house-ops 购房决策仪表盘'),
-      dim(`  ${date}  ·  已评估 ${reports.length} 套 · watchlist ${watchlist.length} 条 · 均分 ${avg}`, 'sub')),
+      h(Text, { bold: true, color: 'magenta' }, 'house-ops 购房操作台'),
+      dim(`  ${date}  ·  评估报告 ${reports.filter(r => r.provenance !== 'void').length} 份 · 候选 ${watchlist.length} 套 · 均分 ${avg}`, 'sub')),
 
     h(Box, { key: 'wl', flexDirection: 'column', marginBottom: 1 },
-      sectionTitle('关注清单 (上下光标移动)'),
+      sectionTitle(`关注清单 [${sortLabels[sortMode] || '综合评分'}] (上下移动)`),
       watchlist.length
         ? h(WatchTable, { rows: watchlist, selectedIndex })
-        : dim('  （空 — 首次评估后自动登记）')),
-
-    h(Box, { key: 'funnel', flexDirection: 'column', marginBottom: 1 },
-      sectionTitle('进度漏斗'), h(Funnel, { watchlist, states })),
+        : dim('  （还没有候选房源）')),
 
     h(Box, { key: 'hist', flexDirection: 'column', marginBottom: 1 },
-      sectionTitle('Global 分布'),
+      sectionTitle('综合评分分布 (Global)'),
       scores.length ? h(Histogram, { scores }) : dim('  （还没有评分）')),
 
     h(Box, { key: 'top', flexDirection: 'column', marginBottom: 1 },
-      sectionTitle('Top 房源'),
+      sectionTitle('Top 高分房源'),
       top.length
         ? h(Box, { flexDirection: 'column' }, top.map((r, i) =>
             h(Box, { key: String(r.report_no ?? r.file) },
               h(Text, { color: i === 0 ? 'yellow' : 'gray' }, `${i + 1}. `),
               h(Text, null, `${r.report_no ?? '???'} ${trunc(r.community, 18)}  `),
-              h(Text, { color: scoreColor(num(r.score_global)) }, `Global ${r.score_global ?? '—'}`),
+              h(Text, { color: scoreColor(num(r.score_global)) }, `评分 ${r.score_global ?? '—'}`),
               dim(`  ${CONCLUSION_LABEL[r.conclusion] ?? r.conclusion ?? ''}`))))
         : dim('  （还没有评估报告 — 粘贴一条房源链接开始）')),
 
@@ -254,7 +262,7 @@ function MainView({ data, selectedIndex, flashMessage }) {
 
     // 快捷键底栏
     h(Box, { key: 'foot', marginTop: 1, borderStyle: 'single', borderColor: 'gray', paddingX: 1 },
-      h(Text, { bold: true }, '↑/↓: 移动 · Enter: 详细报告 · o: 打开原网页 · s: 变更状态 · m: 地图 · r: 刷新 · q: 退出')
+      h(Text, { bold: true }, '↑/↓: 移动 · Enter/m: 地图定位 · i: 报告 · o: 挂牌页 · p: 排序 · r: 刷新 · q: 退出')
     ),
   ]);
 }
@@ -263,10 +271,10 @@ function MainView({ data, selectedIndex, flashMessage }) {
 function Interactive({ onReady }) {
   const [data, setData] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'report' | 'status_picker'
+  const [sortMode, setSortMode] = useState('score'); // 'score' | 'no' | 'price'
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'report'
   const [reportDetail, setReportDetail] = useState(null);
   const [reportScroll, setReportScroll] = useState(0);
-  const [selectedStatusIndex, setSelectedStatusIndex] = useState(0);
   const [flashMessage, setFlashMessage] = useState('');
   const { exit } = useApp();
 
@@ -293,9 +301,32 @@ function Interactive({ onReady }) {
     return () => { on = false; };
   }, []);
 
+  const displayWatchlist = React.useMemo(() => {
+    if (!data?.watchlist) return [];
+    // 真实性过滤（ADR-0002）：⛔作废/虚构行默认隐藏防止干扰；⚠存疑行保留但标记
+    const list = [...data.watchlist].filter(r => r.authenticity !== 'void');
+    if (sortMode === 'score') {
+      return list.sort((a, b) => {
+        const sa = num(a.score);
+        const sb = num(b.score);
+        if (sa != null && sb != null) return sb !== sa ? sb - sa : String(a.no).localeCompare(String(b.no));
+        return sa != null ? -1 : sb != null ? 1 : String(a.no).localeCompare(String(b.no));
+      });
+    }
+    if (sortMode === 'price') {
+      return list.sort((a, b) => {
+        const pa = num(a.price);
+        const pb = num(b.price);
+        if (pa != null && pb != null) return pa !== pb ? pa - pb : String(a.no).localeCompare(String(b.no));
+        return pa != null ? -1 : pb != null ? 1 : String(a.no).localeCompare(String(b.no));
+      });
+    }
+    return list.sort((a, b) => String(a.no).localeCompare(String(b.no)));
+  }, [data?.watchlist, sortMode]);
+
   useInput((input, key) => {
     if (!data) return;
-    const currentHouse = data.watchlist[selectedIndex];
+    const currentHouse = displayWatchlist[selectedIndex];
 
     // ===== 模式 1: 详情报告视图 =====
     if (viewMode === 'report') {
@@ -330,42 +361,14 @@ function Interactive({ onReady }) {
         }
         return;
       }
-      return;
-    }
-
-    // ===== 模式 2: 状态选择器弹窗 =====
-    if (viewMode === 'status_picker') {
-      if (key.escape || input === 'q') {
-        setViewMode('list');
-        return;
-      }
-      if (key.upArrow || input === 'k') {
-        setSelectedStatusIndex(i => (i > 0 ? i - 1 : data.states.length - 1));
-        return;
-      }
-      if (key.downArrow || input === 'j') {
-        setSelectedStatusIndex(i => (i < data.states.length - 1 ? i + 1 : 0));
-        return;
-      }
-      if (key.return) {
-        const newStatus = data.states[selectedStatusIndex];
-        if (currentHouse && newStatus) {
-          updateWatchlistState(join(ROOT, 'data', 'watchlist.md'), currentHouse.no, newStatus).then(ok => {
-            if (ok) {
-              showToast(`✅ 已将 ${currentHouse.no} ${currentHouse.community} 状态变更为 [${newStatus}]`);
-              refreshAll();
-            } else {
-              showToast(`❌ 状态更新失败`);
-            }
-            setViewMode('list');
-          });
-        }
+      if (input === 'm') {
+        openMapForHouse(currentHouse, showToast);
         return;
       }
       return;
     }
 
-    // ===== 模式 3: 主列表视图 =====
+    // ===== 模式 2: 主列表视图 =====
     if (input === 'q') {
       exit();
       return;
@@ -380,11 +383,17 @@ function Interactive({ onReady }) {
       return;
     }
     if (key.downArrow || input === 'j') {
-      setSelectedIndex(i => Math.min(Math.max(0, data.watchlist.length - 1), i + 1));
+      setSelectedIndex(i => Math.min(Math.max(0, displayWatchlist.length - 1), i + 1));
       return;
     }
-    // Enter 查看详情报告
-    if (key.return) {
+    // Enter / m：拉起地图服务并在浏览器中定位到选定房源（深链）
+    if (key.return || input === 'm') {
+      if (!currentHouse) return;
+      openMapForHouse(currentHouse, showToast);
+      return;
+    }
+    // i 键查看内嵌详情报告
+    if (input === 'i') {
       if (!currentHouse) return;
       readReportDetail(join(ROOT, 'reports'), currentHouse.no).then(detail => {
         if (detail) {
@@ -413,24 +422,26 @@ function Interactive({ onReady }) {
       });
       return;
     }
-    // s 键弹出状态选择器
-    if (input === 's') {
-      if (!currentHouse) return;
-      const curIdx = data.states.indexOf(currentHouse.state);
-      setSelectedStatusIndex(curIdx >= 0 ? curIdx : 0);
-      setViewMode('status_picker');
-      return;
-    }
-    // m 键打开决策地图
-    if (input === 'm') {
-      openExternal('http://localhost:3000');
-      showToast('🗺️ 已在浏览器打开房源决策地图: http://localhost:3000');
+    // p 键切换排序方式
+    if (input === 'p') {
+      const next = sortMode === 'score' ? 'no' : sortMode === 'no' ? 'price' : 'score';
+      setSortMode(next);
+      setSelectedIndex(0);
+      const labels = { score: '综合评分 (从高到低)', no: '编号顺序 (升序)', price: '总价 (从低到高)' };
+      showToast(`🔀 已切换排序方式: ${labels[next]}`);
       return;
     }
   });
 
+  if (!data) {
+    return h(Box, { padding: 1 }, [
+      h(Text, { color: 'cyan', bold: true }, '⏳ 正在加载房源数据…')
+    ]);
+  }
+
+  const currentHouse = displayWatchlist[selectedIndex];
+
   if (viewMode === 'report') {
-    const currentHouse = data?.watchlist?.[selectedIndex];
     return h(ReportViewer, {
       reportDetail,
       reportMeta: currentHouse,
@@ -439,19 +450,14 @@ function Interactive({ onReady }) {
     });
   }
 
-  const currentHouse = data?.watchlist?.[selectedIndex];
-
   return h(Box, { flexDirection: 'column' }, [
-    h(MainView, { key: 'main', data, selectedIndex, flashMessage }),
-    viewMode === 'status_picker'
-      ? h(StatusPicker, {
-          key: 'picker',
-          states: data.states,
-          currentStatus: currentHouse?.state,
-          selectedStatusIndex,
-          houseName: `${currentHouse?.no} ${currentHouse?.community}`
-        })
-      : null
+    h(MainView, {
+      key: 'main',
+      data: { ...data, watchlist: displayWatchlist },
+      selectedIndex,
+      flashMessage,
+      sortMode
+    })
   ]);
 }
 
@@ -463,10 +469,15 @@ if (isTTY) {
   const instance = render(h(Interactive, { onReady: markReady }), { exitOnCtrlC: true });
   await instance.waitUntilExit();
 } else {
-  // 管道/CI: 单帧静态纯文本输出
+  // 管道/CI: 单帧静态纯文本输出（与 TTY 同规则：⛔作废行不展示）
   const data = await loadData();
+  const frame = { ...data, watchlist: (data.watchlist ?? []).filter(r => r.authenticity !== 'void') };
   const instance = render(
-    h(Static, { items: ['dash'] }, item => h(Box, { key: item, flexDirection: 'column' }, h(MainView, { data, selectedIndex: 0 })))
+    h(Static, { items: ['dash'] }, item => h(Box, { key: item, flexDirection: 'column' }, h(MainView, {
+      data: frame,
+      selectedIndex: 0,
+      sortMode: 'score'
+    })))
   );
   setTimeout(() => instance.unmount(), 50);
   await instance.waitUntilExit();

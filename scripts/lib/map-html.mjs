@@ -11,249 +11,258 @@ export function renderMapHtml({ initialData, config = {} }) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>house-ops 房源决策地图 — 开箱即用 (免 Key 版)</title>
+  <title>house-ops 房源地图</title>
+  <meta name="theme-color" content="#000000">
   <!-- Leaflet 开源纯净地图引擎 (零 API Key、零注册门槛) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
+    /* ═══════════════════════════════════════════════════════════════
+       Design tokens — Apple 系统色板（深色）/ 标签色分层 / 材质变量
+       ═══════════════════════════════════════════════════════════════ */
     :root {
-      --bg-primary: #0b0f19;
-      --bg-surface: #151e2e;
-      --bg-surface-elevated: #1e293b;
-      --bg-surface-hover: #273549;
-      --border-color: #2b3b52;
-      --border-color-light: #3b4d66;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --brand: #38bdf8;
-      --brand-dark: #0284c7;
-      --green: #10b981;
-      --yellow: #f59e0b;
-      --red: #ef4444;
-      --purple: #a855f7;
-      --gray: #64748b;
-      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+      --bg-base: #000000;
+      --bg-primary: #0a0a0c;
+      --bg-surface: rgba(28, 28, 30, 0.72);
+      --bg-surface-elevated: rgba(44, 44, 46, 0.65);
+      --bg-surface-hover: rgba(58, 58, 60, 0.55);
+      --bg-inset: rgba(118, 118, 128, 0.18);
+      --border-color: rgba(84, 84, 88, 0.55);
+      --border-color-light: rgba(120, 120, 128, 0.7);
+      --text-main: rgba(255, 255, 255, 0.92);
+      --text-muted: rgba(235, 235, 245, 0.6);
+      --text-tertiary: rgba(235, 235, 245, 0.38);
+      --brand: #0A84FF;
+      --brand-dark: #0060df;
+      --brand-tint: rgba(10, 132, 255, 0.16);
+      --green: #30D158;
+      --yellow: #FF9F0A;
+      --red: #FF453A;
+      --purple: #BF5AF2;
+      --gray: #98989F;
+      --radius-s: 8px; --radius-m: 12px; --radius-l: 18px;
+      --material-chrome: rgba(22, 22, 24, 0.68);
+      --material-panel: rgba(28, 28, 30, 0.74);
+      --blur-chrome: blur(24px) saturate(180%);
+      --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.35);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      background: var(--bg-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", sans-serif;
+      font-optical-sizing: auto;
+      font-size: 15px;
+      line-height: 1.47;
+      letter-spacing: 0.01em;
+      background: var(--bg-base);
       color: var(--text-main);
       overflow: hidden;
       height: 100vh;
       width: 100vw;
       display: flex;
       flex-direction: column;
+      -webkit-font-smoothing: antialiased;
     }
+    ::selection { background: rgba(10, 132, 255, 0.35); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    button, input, select, textarea { font: inherit; letter-spacing: inherit; }
+    :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+    strong, b { font-weight: 600; }
 
-    /* 顶部导航 */
+    /* ── 顶部导航：铬材质（内容从其下滚过，亮边在上） ── */
     header {
-      height: 60px;
-      background: rgba(15, 23, 42, 0.94);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border-color);
+      height: 56px;
+      background: var(--material-chrome);
+      backdrop-filter: var(--blur-chrome);
+      -webkit-backdrop-filter: var(--blur-chrome);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 18px;
+      gap: 12px;
+      padding: 0 16px;
       z-index: 1000;
       flex-shrink: 0;
     }
-    .brand-box {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .brand-box { display: flex; align-items: center; gap: 10px; }
     .brand-logo {
-      font-size: 1.25rem;
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      font-size: 1.15rem;
+      background: linear-gradient(135deg, #6fb7ff, #8b9dff);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
-      font-weight: 800;
-      letter-spacing: -0.5px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
     }
     .brand-badge {
-      font-size: 0.72rem;
-      background: #1e293b;
+      font-size: 0.7rem;
+      background: var(--bg-inset);
       border: 1px solid var(--border-color);
-      color: #38bdf8;
-      padding: 2px 8px;
+      color: var(--text-muted);
+      padding: 2px 9px;
       border-radius: 999px;
-      font-weight: 600;
+      font-weight: 500;
     }
 
-    /* 地图标注视角切换 */
+    /* ── 分段控件（Apple Segmented Control） ── */
     .view-mode-bar {
       display: flex;
       align-items: center;
-      background: rgba(11, 15, 25, 0.7);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 3px;
-      gap: 4px;
+      background: var(--bg-inset);
+      border-radius: 10px;
+      padding: 2px;
+      gap: 2px;
     }
     .view-mode-btn {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 0.78rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 5px;
-      transition: all 0.2s;
+      transition: color 180ms var(--ease-apple), background 180ms var(--ease-apple), transform 100ms ease-out;
     }
-    .view-mode-btn:hover { color: #fff; }
+    .view-mode-btn:hover { color: var(--text-main); }
+    .view-mode-btn:active { transform: scale(0.96); }
     .view-mode-btn.active {
-      background: #1e293b;
-      color: #38bdf8;
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
       font-weight: 600;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
-    .header-stats {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      font-size: 0.82rem;
-    }
+    .header-stats { display: flex; gap: 6px; align-items: center; font-size: 0.8rem; }
     .stat-pill {
       display: flex;
       align-items: center;
       gap: 6px;
-      background: rgba(30, 41, 59, 0.7);
-      border: 1px solid var(--border-color);
-      padding: 4px 10px;
-      border-radius: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      padding: 5px 11px;
+      border-radius: 999px;
       cursor: pointer;
       user-select: none;
-      transition: all 0.2s;
+      color: var(--text-muted);
+      transition: background 180ms var(--ease-apple), color 180ms var(--ease-apple), border-color 180ms var(--ease-apple), transform 100ms ease-out;
     }
-    .stat-pill:hover, .stat-pill.active {
-      border-color: var(--brand);
-      background: #1e293b;
+    .stat-pill:hover { background: var(--bg-inset); }
+    .stat-pill:active { transform: scale(0.96); }
+    .stat-pill.active {
+      border-color: rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
     }
-    .stat-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .dot-green { background: var(--green); box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); }
+    .stat-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .dot-green { background: var(--green); box-shadow: 0 0 6px rgba(48, 209, 88, 0.55); }
     .dot-yellow { background: var(--yellow); }
     .dot-red { background: var(--gray); }
 
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
     button.btn {
-      background: var(--bg-surface);
+      background: var(--bg-inset);
       color: var(--text-main);
       border: 1px solid var(--border-color);
-      padding: 6px 12px;
-      border-radius: 6px;
+      padding: 6px 13px;
+      border-radius: 10px;
       font-size: 0.82rem;
+      font-weight: 500;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.2s;
+      transition: background 180ms var(--ease-apple), transform 100ms ease-out, border-color 180ms var(--ease-apple);
     }
-    button.btn:hover {
-      background: var(--bg-surface-hover);
-      border-color: #475569;
-    }
+    button.btn:hover { background: var(--bg-surface-hover); }
+    button.btn:active { transform: scale(0.96); background: rgba(118, 118, 128, 0.32); }
     button.btn-primary {
-      background: linear-gradient(135deg, #0284c7, #2563eb);
-      border: none;
+      background: var(--brand);
+      border-color: transparent;
       color: #fff;
       font-weight: 600;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 6px rgba(10, 132, 255, 0.35);
     }
-    button.btn-primary:hover {
-      opacity: 0.94;
-      box-shadow: 0 0 14px rgba(37, 99, 235, 0.5);
-    }
+    button.btn-primary:hover { background: #2294ff; }
+    button.btn-primary:active { background: var(--brand-dark); }
 
-    /* 底图选择下拉菜单 */
+    /* ── 底图选择 ── */
     .basemap-select {
-      background: #0b0f19;
-      color: #cbd5e1;
+      background: var(--bg-inset);
+      color: var(--text-main);
       border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 5px 8px;
+      border-radius: 10px;
+      padding: 6px 9px;
       font-size: 0.78rem;
       cursor: pointer;
     }
     .basemap-select:focus { outline: none; border-color: var(--brand); }
 
-    /* 主容器 */
-    .main-container {
-      flex: 1;
-      position: relative;
-      display: flex;
-      overflow: hidden;
-    }
-
-    /* Leaflet 地图容器 */
-    #map-root {
-      flex: 1;
-      height: 100%;
-      width: 100%;
-      background: #090d16;
-      z-index: 1;
-    }
-    /* 高德免 Key 暗黑科技风滤镜 (国内直连、秒开且保持全部建筑与路网细节) */
+    /* ── 主容器 ── */
+    .main-container { flex: 1; position: relative; display: flex; overflow: hidden; }
+    #map-root { flex: 1; height: 100%; width: 100%; background: #06070a; z-index: 1; }
     .map-tiles-dark .leaflet-tile-pane {
-      filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(92%);
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%) saturate(86%);
     }
 
-    /* 侧边筛选与图层控制面板 */
+    /* ── 浮动筛选面板：重材质（更大表面=更厚材质） ── */
     .filter-panel {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 14px;
+      left: 14px;
       width: 330px;
-      max-height: calc(100% - 32px);
-      background: rgba(21, 30, 46, 0.95);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
+      max-height: calc(100% - 28px);
+      background: var(--material-panel);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-l);
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       z-index: 500;
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 360ms var(--ease-apple), opacity 360ms var(--ease-apple);
     }
-    .filter-panel.collapsed {
-      transform: translateX(-350px);
-    }
+    .filter-panel.collapsed { transform: translateX(-360px); opacity: 0; }
     .panel-toggle-btn {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 14px;
+      left: 14px;
       z-index: 499;
-      background: rgba(21, 30, 46, 0.92);
-      border: 1px solid var(--border-color);
-      color: #fff;
-      border-radius: 8px;
-      padding: 8px 12px;
+      background: var(--material-panel);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      border-radius: 12px;
+      padding: 9px 14px;
       cursor: pointer;
-      backdrop-filter: blur(8px);
-      box-shadow: var(--shadow);
-      font-size: 0.85rem;
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      box-shadow: var(--shadow-soft);
+      font-size: 0.84rem;
+      font-weight: 500;
+      transition: transform 100ms ease-out, background 180ms var(--ease-apple);
     }
+    .panel-toggle-btn:active { transform: scale(0.96); }
 
     .panel-header {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 14px 16px 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     }
-    .panel-title { font-size: 0.95rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; }
+    .panel-title { font-size: 0.92rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
     .panel-body {
-      padding: 14px 16px;
+      padding: 14px 16px 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -261,194 +270,171 @@ export function renderMapHtml({ initialData, config = {} }) {
       font-size: 0.85rem;
     }
 
-    .filter-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    /* ── 筛选组 ── */
+    .filter-group { display: flex; flex-direction: column; gap: 7px; }
     .filter-label {
       font-weight: 600;
       color: var(--text-muted);
-      font-size: 0.76rem;
+      font-size: 0.72rem;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.06em;
       display: flex;
       justify-content: space-between;
     }
-    .filter-label span.val { color: var(--brand); font-weight: bold; }
-
-    .range-inputs {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .filter-label span.val { color: var(--text-main); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .range-inputs { display: flex; align-items: center; gap: 8px; }
     .range-inputs input[type="number"] {
       width: 100%;
-      background: #0b0f19;
+      background: var(--bg-inset);
       border: 1px solid var(--border-color);
-      border-radius: 6px;
-      color: #fff;
-      padding: 6px 8px;
+      border-radius: 8px;
+      color: var(--text-main);
+      padding: 7px 9px;
       font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+      transition: border-color 160ms var(--ease-apple);
     }
+    .range-inputs input[type="number"]:focus { outline: none; border-color: var(--brand); }
 
+    /* ── 开关（Apple Switch） ── */
     .switch-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       cursor: pointer;
       user-select: none;
-      padding: 3px 0;
+      padding: 4px 0;
+      gap: 12px;
     }
     .switch-box {
-      width: 36px;
-      height: 20px;
-      background: #334155;
-      border-radius: 10px;
+      width: 40px;
+      height: 23px;
+      background: rgba(120, 120, 128, 0.32);
+      border-radius: 999px;
       position: relative;
-      transition: background 0.2s;
+      transition: background 220ms var(--ease-apple);
       flex-shrink: 0;
     }
-    .switch-box.active { background: var(--brand); }
+    .switch-box.active { background: var(--green); }
     .switch-box.active-purple { background: var(--purple); }
     .switch-dot {
-      width: 16px;
-      height: 16px;
+      width: 19px;
+      height: 19px;
       background: #fff;
       border-radius: 50%;
       position: absolute;
       top: 2px;
       left: 2px;
-      transition: transform 0.2s;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+      transition: transform 260ms var(--ease-apple);
     }
-    .switch-box.active .switch-dot, .switch-box.active-purple .switch-dot {
-      transform: translateX(16px);
-    }
+    .switch-box.active .switch-dot, .switch-box.active-purple .switch-dot { transform: translateX(17px); }
+    .switch-row:active .switch-dot { width: 21px; }
 
-    /* 状态与分类标签选择 */
-    .chip-container {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
+    /* ── 筹码（筛选标签） ── */
+    .chip-container { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip {
-      padding: 4px 8px;
-      border-radius: 6px;
-      background: #0b0f19;
-      border: 1px solid var(--border-color);
+      padding: 5px 11px;
+      border-radius: 8px;
+      background: var(--bg-inset);
+      border: 1px solid transparent;
       color: var(--text-muted);
       cursor: pointer;
       font-size: 0.78rem;
+      font-weight: 500;
       user-select: none;
-      transition: all 0.15s;
+      transition: background 160ms var(--ease-apple), color 160ms var(--ease-apple), transform 100ms ease-out;
     }
+    .chip:hover { color: var(--text-main); }
+    .chip:active { transform: scale(0.95); }
     .chip.active {
-      border-color: var(--brand);
-      color: #fff;
-      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(10, 132, 255, 0.5);
+      color: #6cb8ff;
+      background: var(--brand-tint);
     }
 
-    /* 房源列表卡片 */
-    .house-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 4px;
-      max-height: 230px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
+    /* ── 房源列表卡片 ── */
+    .house-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; max-height: 230px; overflow-y: auto; padding-right: 4px; }
     .house-item {
-      background: #0b0f19;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 8px 10px;
+      background: var(--bg-inset);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-m);
+      padding: 9px 11px;
       display: flex;
       flex-direction: column;
       gap: 6px;
       cursor: pointer;
-      transition: border-color 0.2s;
+      transition: border-color 160ms var(--ease-apple), background 160ms var(--ease-apple), transform 100ms ease-out;
     }
-    .house-item:hover, .house-item.selected {
-      border-color: var(--brand);
-      background: #101726;
+    .house-item:hover { background: rgba(255, 255, 255, 0.07); }
+    .house-item:active { transform: scale(0.98); }
+    .house-item.selected {
+      border-color: rgba(10, 132, 255, 0.6);
+      background: var(--brand-tint);
     }
-    .house-item-main {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .house-item-title { font-weight: 600; font-size: 0.85rem; color: #f1f5f9; }
+    .house-item-main { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .house-item-title { font-weight: 600; font-size: 0.85rem; letter-spacing: -0.01em; color: var(--text-main); }
     .house-item-sub { font-size: 0.74rem; color: var(--text-muted); }
-
-    .house-item-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      font-size: 0.7rem;
-    }
-    .tag-badge {
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(30, 41, 59, 0.8);
-      color: #94a3b8;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-    }
-    .tag-policy { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border-color: rgba(168, 85, 247, 0.3); }
-    .tag-trend { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.3); }
-    .tag-planning { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+    .house-item-tags { display: flex; flex-wrap: wrap; gap: 4px; font-size: 0.7rem; }
+    .tag-badge { padding: 1.5px 7px; border-radius: 5px; background: rgba(118, 118, 128, 0.22); color: var(--text-muted); }
+    .tag-policy { background: rgba(191, 90, 242, 0.16); color: #d9a8ff; }
+    .tag-trend { background: rgba(100, 210, 255, 0.14); color: #8ad2ff; }
+    .tag-planning { background: rgba(48, 209, 88, 0.14); color: #7ee2a0; }
 
     .score-badge {
       font-weight: 700;
       font-size: 0.8rem;
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 2px 7px;
+      border-radius: 6px;
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
-    .score-high { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
-    .score-mid { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
-    .score-low { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); text-decoration: line-through; }
+    .score-high { background: rgba(48, 209, 88, 0.18); color: #4ade80; }
+    .score-mid { background: rgba(255, 159, 10, 0.18); color: #ffb340; }
+    .score-low { background: rgba(152, 152, 159, 0.18); color: var(--text-muted); text-decoration: line-through; }
 
-    /* 底部对比方案栏 (Compare Tray) */
+    /* ── 对比托盘 ── */
     .compare-tray {
       position: absolute;
       bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(21, 30, 46, 0.95);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--brand);
-      border-radius: 12px;
-      padding: 10px 18px;
+      background: var(--material-panel);
+      backdrop-filter: var(--blur-chrome);
+      -webkit-backdrop-filter: var(--blur-chrome);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-l);
+      padding: 10px 16px;
       display: none;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       box-shadow: var(--shadow);
       z-index: 600;
-      animation: slideUp 0.2s ease-out;
+      animation: materialize 320ms var(--ease-apple);
     }
     .compare-tray.show { display: flex; }
     .compare-chips { display: flex; gap: 8px; }
     .compare-chip {
-      background: #0b0f19;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 4px 8px;
+      background: var(--bg-inset);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 5px 9px;
       font-size: 0.78rem;
-      color: #fff;
+      color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 6px;
     }
-    .compare-chip-del { cursor: pointer; color: var(--text-muted); font-weight: bold; }
+    .compare-chip-del { cursor: pointer; color: var(--text-muted); font-weight: 600; }
     .compare-chip-del:hover { color: var(--red); }
 
-    /* 多方案横向对比全屏模态弹窗 */
+    /* ── 对比模态：压暗 + 材质浮现 ── */
     .compare-modal-mask {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.82);
-      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 1200;
       display: none;
       align-items: center;
@@ -460,167 +446,134 @@ export function renderMapHtml({ initialData, config = {} }) {
       width: 1100px;
       max-width: 95vw;
       max-height: 90vh;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-color-light);
-      border-radius: 16px;
+      background: var(--bg-primary);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
       display: flex;
       flex-direction: column;
-      box-shadow: var(--shadow);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
       overflow: hidden;
+      animation: materialize 320ms var(--ease-apple);
     }
     .compare-modal-header {
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 16px 22px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: #101726;
+      background: rgba(255, 255, 255, 0.03);
     }
-    .compare-modal-body {
-      padding: 24px;
-      overflow-y: auto;
-      flex: 1;
-    }
-    .compare-matrix-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-    }
-    .compare-matrix-table th, .compare-matrix-table td {
-      border: 1px solid var(--border-color);
-      padding: 12px 14px;
-      vertical-align: top;
-      line-height: 1.5;
-    }
-    .compare-matrix-table th {
-      background: #0f172a;
-      color: #94a3b8;
-      font-weight: 600;
-      text-align: left;
-      width: 180px;
-    }
-    .compare-matrix-table td {
-      background: rgba(15, 23, 42, 0.5);
-      color: #e2e8f0;
-    }
+    .compare-modal-body { padding: 22px; overflow-y: auto; flex: 1; }
+    .compare-matrix-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-m); overflow: hidden; }
+    .compare-matrix-table th, .compare-matrix-table td { border-bottom: 1px solid var(--border-color); padding: 12px 14px; vertical-align: top; line-height: 1.5; }
+    .compare-matrix-table th:not(:first-child), .compare-matrix-table td:not(:first-child) { border-left: 1px solid var(--border-color); }
+    .compare-matrix-table tr:last-child td { border-bottom: none; }
+    .compare-matrix-table th { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); font-weight: 600; text-align: left; width: 180px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .compare-matrix-table td { background: rgba(255, 255, 255, 0.02); color: var(--text-main); }
 
-    /* 右下角房源深度详情弹窗 */
+    /* ── 房源详情卡（右下角，轻材质不遮流） ── */
     .report-modal {
       position: fixed;
-      bottom: 24px;
-      right: 24px;
+      bottom: 22px;
+      right: 22px;
       width: 420px;
       max-width: 92vw;
       max-height: 85vh;
       overflow-y: auto;
-      background: rgba(21, 30, 46, 0.96);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--brand);
-      border-radius: 14px;
+      background: var(--material-panel);
+      backdrop-filter: blur(30px) saturate(180%);
+      -webkit-backdrop-filter: blur(30px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-l);
       box-shadow: var(--shadow);
       z-index: 700;
-      padding: 18px;
+      padding: 16px;
       display: none;
       flex-direction: column;
-      gap: 14px;
-      animation: slideUp 0.25s ease-out;
+      gap: 12px;
+      animation: materialize 300ms var(--ease-apple);
     }
     .report-modal.show { display: flex; }
+    @keyframes materialize {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); filter: blur(4px); }
+      to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
     @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
+      from { transform: translateX(-50%) translateY(12px); opacity: 0; }
+      to { transform: translateX(-50%) translateY(0); opacity: 1; }
     }
 
     .detail-card-section {
-      background: #0b0f19;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 10px 12px;
+      background: var(--bg-inset);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius-m);
+      padding: 11px 13px;
       font-size: 0.8rem;
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
     .section-headline {
-      font-weight: 700;
-      font-size: 0.78rem;
-      color: var(--brand);
+      font-weight: 600;
+      font-size: 0.76rem;
+      letter-spacing: 0.04em;
+      color: #6cb8ff;
       display: flex;
       align-items: center;
       gap: 6px;
     }
 
-    /* Leaflet 自定义 HTML Marker 样式 */
-    .leaflet-div-icon {
-      background: transparent !important;
-      border: none !important;
-    }
+    /* ── 地图 Marker（系统色、无过冲悬停） ── */
+    .leaflet-div-icon { background: transparent !important; border: none !important; }
     .map-marker {
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-weight: bold;
-      font-size: 11px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 11.5px;
+      letter-spacing: 0.01em;
       white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-      transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255,255,255,0.22);
+      transition: transform 180ms var(--ease-apple), box-shadow 180ms var(--ease-apple);
       user-select: none;
     }
     .map-marker:hover {
-      transform: scale(1.1) translateY(-2px);
+      transform: scale(1.06) translateY(-1px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
       z-index: 1000 !important;
     }
-    .map-marker.work {
-      background: linear-gradient(135deg, #ef4444, #f97316);
-      color: #fff;
-      border: 2px solid #fff;
-    }
-    .map-marker.high {
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: #fff;
-      border: 2px solid #a7f3d0;
-    }
-    .map-marker.mid {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #fff;
-      border: 2px solid #fde68a;
-    }
-    .map-marker.low {
-      background: #334155;
-      color: #94a3b8;
-      border: 1px solid #475569;
-      opacity: 0.75;
-    }
+    .map-marker.work { background: linear-gradient(180deg, #ff5f57, #eb4d38); color: #fff; border: 1.5px solid rgba(255,255,255,0.85); }
+    .map-marker.high { background: linear-gradient(180deg, #35d06a, #1eab52); color: #fff; border: 1.5px solid rgba(255,255,255,0.85); }
+    .map-marker.mid { background: linear-gradient(180deg, #ffb340, #f5900a); color: #3a2800; border: 1.5px solid rgba(255,255,255,0.85); }
+    .map-marker.low { background: rgba(72, 72, 74, 0.9); color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.3); opacity: 0.78; }
     .map-marker.low:hover { opacity: 1; }
-
-    /* 规划与地块 Marker */
     .map-marker-planning {
-      background: rgba(168, 85, 247, 0.95);
+      background: rgba(191, 90, 242, 0.92);
       color: #fff;
-      border: 1px dashed #e9d5ff;
+      border: 1px dashed rgba(233, 213, 255, 0.8);
       font-size: 10px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      padding: 3px 9px;
+      border-radius: 8px;
+      box-shadow: 0 3px 9px rgba(0,0,0,0.45);
       white-space: nowrap;
     }
 
-    /* 右侧需求配置抽屉 (Profile Drawer) */
+    /* ── 需求抽屉（Apple Sheet：同路径进出，材质推入） ── */
     .drawer-mask {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(4px);
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       z-index: 1100;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 320ms var(--ease-apple);
     }
     .drawer-mask.open { opacity: 1; pointer-events: auto; }
-
     .drawer {
       position: fixed;
       top: 0;
@@ -628,25 +581,24 @@ export function renderMapHtml({ initialData, config = {} }) {
       width: 480px;
       max-width: 90vw;
       height: 100vh;
-      background: var(--bg-surface);
-      border-left: 1px solid var(--border-color);
+      background: var(--bg-primary);
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
       z-index: 1150;
       transform: translateX(100%);
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 380ms var(--ease-apple);
       display: flex;
       flex-direction: column;
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.7);
+      box-shadow: -16px 0 44px rgba(0, 0, 0, 0.6);
     }
     .drawer.open { transform: translateX(0); }
-
     .drawer-header {
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .drawer-title { font-size: 1.05rem; font-weight: 700; color: #fff; }
+    .drawer-title { font-size: 1.02rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text-main); }
     .drawer-body {
       padding: 20px;
       overflow-y: auto;
@@ -657,70 +609,74 @@ export function renderMapHtml({ initialData, config = {} }) {
       font-size: 0.88rem;
     }
     .drawer-footer {
-      padding: 16px 20px;
-      border-top: 1px solid var(--border-color);
+      padding: 14px 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       justify-content: flex-end;
       gap: 12px;
-      background: #101726;
+      background: rgba(255, 255, 255, 0.03);
     }
 
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .form-label {
-      font-weight: 600;
-      color: #cbd5e1;
-      font-size: 0.82rem;
-    }
-    .form-help {
-      font-size: 0.74rem;
-      color: var(--text-muted);
-    }
+    /* ── 表单 ── */
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-weight: 500; color: var(--text-main); font-size: 0.82rem; }
+    .form-help { font-size: 0.73rem; color: var(--text-muted); }
     .form-input {
-      background: #0b0f19;
+      background: var(--bg-inset);
       border: 1px solid var(--border-color);
-      border-radius: 6px;
-      color: #fff;
+      border-radius: 10px;
+      color: var(--text-main);
       padding: 8px 12px;
       font-size: 0.88rem;
-      transition: border-color 0.2s;
+      transition: border-color 160ms var(--ease-apple), box-shadow 160ms var(--ease-apple);
     }
     .form-input:focus {
       outline: none;
       border-color: var(--brand);
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
     }
     textarea.form-input {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.8rem;
-      line-height: 1.5;
+      font-size: 0.78rem;
+      line-height: 1.55;
       resize: vertical;
     }
 
-    /* Toast 提示 */
+    /* ── Toast：材质浮现，不打断 ── */
     .toast {
       position: fixed;
-      top: 68px;
+      top: 66px;
       left: 50%;
-      transform: translateX(-50%) translateY(-20px);
-      background: #10b981;
-      color: #fff;
-      padding: 8px 18px;
-      border-radius: 8px;
-      font-size: 0.88rem;
+      transform: translateX(-50%) translateY(-14px) scale(0.97);
+      background: rgba(48, 209, 88, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #06280f;
+      padding: 9px 20px;
+      border-radius: 999px;
+      font-size: 0.85rem;
       font-weight: 600;
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadow-soft);
       z-index: 1500;
       opacity: 0;
       pointer-events: none;
-      transition: all 0.25s;
+      transition: opacity 240ms var(--ease-apple), transform 240ms var(--ease-apple);
     }
-    .toast.show {
-      transform: translateX(-50%) translateY(0);
-      opacity: 1;
+    .toast.show { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+
+    /* ── 无障碍三档（Apple HIG） ── */
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+      .filter-panel, .drawer, .toast, .compare-tray, .report-modal, .compare-modal-content { transition: opacity 200ms ease; transform: none !important; }
+      .map-marker:hover { transform: none; }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      header, .filter-panel, .compare-tray, .report-modal, .panel-toggle-btn, .toast { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: #1c1c1e; }
+      :root { --bg-inset: rgba(70, 70, 74, 0.45); }
+    }
+    @media (prefers-contrast: more) {
+      :root { --text-muted: rgba(255, 255, 255, 0.82); --border-color: rgba(255, 255, 255, 0.4); }
+      header, .filter-panel, .report-modal { border-color: rgba(255, 255, 255, 0.35); }
     }
   </style>
 </head>
@@ -1131,7 +1087,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     const DEMO_HOUSES = [
       {
         report_no: "001",
-        community: "示范翠屏苑",
+        community: "演示小区·壹（虚构）",
         city: "上海",
         district: "浦东金桥",
         type: "二手住宅",
@@ -1155,12 +1111,11 @@ export function renderMapHtml({ initialData, config = {} }) {
         marketing_claim: "中介宣称'紧邻轨交枢纽，对口名校，绝版好房抢手'",
         verified_fact: "已交叉验证：实测步行至21号线在建站约700m，非现成上盖；对口小学办学仅3年并非名校；但满五唯一与筑底折价属实",
         tradeoff_summary: "【优势】自住品质与户型极佳，筑底期议价空间健康；【代价】单价贴近预算上限，需承担2年轨交施工期噪音。",
-        state: "已看房",
         coords: [121.6112, 31.2586]
       },
       {
         report_no: "002",
-        community: "示范新城",
+        community: "演示小区·贰（虚构）",
         city: "上海",
         district: "浦东金桥",
         type: "二手住宅",
@@ -1184,12 +1139,11 @@ export function renderMapHtml({ initialData, config = {} }) {
         marketing_claim: "房东急售笋盘，低于市场价30万，送全套家具软装",
         verified_fact: "已交叉验证：二楼独立排水未改造有返水隐患，且近3个月同户型成交均价460万，480万并无明显倒挂，非真实笋盘",
         tradeoff_summary: "【优势】总价更低且房东急售折价弹性大，低门槛上车；【代价】税费较高且学位受限，抗跌性稍弱。",
-        state: "已评估",
         coords: [121.5980, 31.2650]
       },
       {
         report_no: "003",
-        community: "示范绿洲四期",
+        community: "演示小区·叁（虚构）",
         city: "上海",
         district: "浦东高行",
         type: "动迁混居住宅",
@@ -1213,12 +1167,11 @@ export function renderMapHtml({ initialData, config = {} }) {
         marketing_claim: "宣称'总价低至420万，超大赠送面积，未来绿地环绕'",
         verified_fact: "已交叉验证：赠送部位属违建私封北天井，有拆除风险；西侧法定控规为垃圾中转站而非绿地，营销虚假承诺",
         tradeoff_summary: "【优势】绝对总价最低(420万)；【代价】命中硬性DQ（噪音超标+回迁混居），未来转手与居住体验风险过大。",
-        state: "弃购",
         coords: [121.6030, 31.2950]
       },
       {
         report_no: "004",
-        community: "示范云园二期",
+        community: "演示小区·肆（虚构）",
         city: "上海",
         district: "浦东碧云",
         type: "二手国际社区",
@@ -1242,7 +1195,6 @@ export function renderMapHtml({ initialData, config = {} }) {
         marketing_claim: "纯正涉外国际社区，保值抗跌首选",
         verified_fact: "已交叉验证：抗跌性与国际圈层属实，但总价超出用户预算上限180万，税费极高，属画像硬性不符",
         tradeoff_summary: "【优势】圈层与自住品质天花板；【代价】总价超出预算180万触发硬性DQ，仅作为品质标杆方案对照。",
-        state: "弃购",
         coords: [121.5850, 31.2420]
       }
     ];
@@ -1297,10 +1249,23 @@ export function renderMapHtml({ initialData, config = {} }) {
       // 解决 Flexbox 布局下初始化与缩放视口计算偏移，确保切片全幅自动加载
       setTimeout(() => {
         if (leafletMap) leafletMap.invalidateSize();
+        handleDeepLink();
       }, 150);
       window.addEventListener('resize', () => {
         if (leafletMap) leafletMap.invalidateSize();
       });
+    }
+
+    // 深链：?house=<报告编号|小区名> → 选中房源、打开详情卡、地图定位（dashboard Enter 拉起）
+    function handleDeepLink() {
+      try {
+        const q = new URLSearchParams(location.search).get('house');
+        if (!q) return;
+        const norm = String(q).trim().toLowerCase();
+        const target = houses.find(h => String(h.report_no ?? '').toLowerCase() === norm)
+          || houses.find(h => (h.community || '').toLowerCase().includes(norm));
+        if (target) selectHouse(target);
+      } catch (e) {}
     }
 
     // 底图无缝切换 (全部免 Key，国内高速直连，自动按缩放层级拉取精细切片)
@@ -1400,7 +1365,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     function updateStatsHeader() {
       let rec = 0, cond = 0, pass = 0;
       houses.forEach(h => {
-        if (h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.state === '弃购') {
+        if (h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass') {
           pass++;
         } else if ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'strong_buy' || h.conclusion === 'worth_viewing') {
           rec++;
@@ -1462,7 +1427,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       const aMax = parseFloat(document.getElementById('filter-area-max').value) || null;
 
       return houses.filter(h => {
-        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.state === '弃购';
+        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass';
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const isCond = !isRejected && !isRec;
 
@@ -1511,7 +1476,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         item.innerHTML = \`
           <div class="house-item-main">
             <div>
-              <div class="house-item-title">\${h.community || '房源 #' + h.report_no}</div>
+              <div class="house-item-title">\${h.authenticity === 'suspect' ? '⚠ ' : ''}\${h.community || '房源 #' + h.report_no}</div>
               <div class="house-item-sub">\${h.district || ''} · \${h.total_price_wan ? h.total_price_wan + '万' : '--'} · \${h.area_sqm ? h.area_sqm + '㎡' : ''}</div>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
@@ -1535,7 +1500,9 @@ export function renderMapHtml({ initialData, config = {} }) {
       currentSelectedHouse = h;
       document.getElementById('m-no').textContent = '#' + (h.report_no || '---');
       document.getElementById('m-title').textContent = h.community || '未命名小区';
-      document.getElementById('m-sub').textContent = \`\${h.city || ''} \${h.district || ''} · \${h.type || '住宅'} · \${h.state || '已评估'}\`;
+      const _note = h.watchlist_note ? (h.watchlist_note.length > 26 ? h.watchlist_note.slice(0, 26) + '…' : h.watchlist_note) : '';
+      const _sus = h.authenticity === 'suspect' ? ' · ⚠ 真实性存疑' : '';
+      document.getElementById('m-sub').textContent = \`\${h.city || ''} \${h.district || ''} · \${h.type || '住宅'}\${_sus}\${_note ? ' · 📝 ' + _note : ''}\`;
       document.getElementById('m-price').textContent = (h.total_price_wan || '--') + ' 万';
       document.getElementById('m-unit-price').textContent = (h.unit_price ? h.unit_price.toLocaleString() : '--') + ' 元/㎡';
       document.getElementById('m-area').textContent = (h.area_sqm || '--') + ' ㎡';
@@ -1856,29 +1823,37 @@ export function renderMapHtml({ initialData, config = {} }) {
 
       list.forEach((h, idx) => {
         const key = [h.city, h.district, h.community].filter(Boolean).join('·');
-        let rawCoord = h.coords || geoCache[key];
+        let rawCoord = h.coords || geoCache[key] || geoCache[h.community];
+        if (typeof rawCoord === 'string' && rawCoord.startsWith('[')) {
+          try { rawCoord = JSON.parse(rawCoord); } catch (e) {}
+        }
 
         // 容错基准坐标（如浦东金桥周边微调）
         let lat = 31.25 + (idx * 0.012), lng = 121.60 + (idx * 0.008);
-        if (rawCoord && rawCoord.length >= 2) {
-          // 坐标若是 [lng, lat]
-          if (rawCoord[0] > 70) {
-            lng = rawCoord[0];
-            lat = rawCoord[1];
-          } else {
-            lat = rawCoord[0];
-            lng = rawCoord[1];
+        if (Array.isArray(rawCoord) && rawCoord.length >= 2) {
+          const c0 = Number(rawCoord[0]);
+          const c1 = Number(rawCoord[1]);
+          if (!isNaN(c0) && !isNaN(c1)) {
+            // 坐标若是 [lng, lat]
+            if (c0 > 70) {
+              lng = c0;
+              lat = c1;
+            } else {
+              lat = c0;
+              lng = c1;
+            }
           }
         }
         h._latlng = [lat, lng];
 
-        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.state === '弃购';
+        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass';
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const cls = isRejected ? 'low' : isRec ? 'high' : 'mid';
 
         let label = '';
+        const suspectMark = h.authenticity === 'suspect' ? '⚠ ' : '';
         if (markerViewMode === 'score') {
-          label = (isRec ? '★ ' : '') + (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
+          label = (isRec ? '★ ' : '') + suspectMark + (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
         } else if (markerViewMode === 'trend') {
           const flex = h.discount_space === 'wide' ? '弹性5%+' : '弹性3-5%';
           label = (h.community || h.report_no) + ' · ' + (h.market_trend === 'bottoming' ? '筑底' : '阴跌') + ' · ' + flex;

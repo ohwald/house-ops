@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
 
-import { collectReports, parseWatchlist, readStates } from './lib/data.mjs';
+import { collectReports, parseWatchlist } from './lib/data.mjs';
 import { parseProfile, updateProfileFields } from './lib/profile.mjs';
 import { loadGeoCache, saveGeoCache } from './lib/geo.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
@@ -62,33 +62,37 @@ async function loadFullData() {
     geoCache = await loadGeoCache(join(ROOT, 'data', '.geo-cache.json'));
   }
 
-  const [reports, watchlist, states, rawProfile] = await Promise.all([
+  const [reports, watchlist, rawProfile] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
-    readStates(join(ROOT, 'templates', 'states.yml')),
     readFile(PROFILE_PATH, 'utf8').catch(() => ''),
   ]);
 
   const parsedProfile = parseProfile(rawProfile);
 
-  // 状态机与地理坐标补充到报告列表中
+  // 备注与地理坐标补充到报告列表中
+  // 真实性（ADR-0002）：⛔作废报告不上图；评分以 watchlist 当前口径为准（报告 Machine Summary 可能是重评前旧分）
+  const num = s => { const v = parseFloat(s); return Number.isFinite(v) ? v : null; };
   const watchMap = new Map((watchlist || []).map(w => [w.no, w]));
-  const mergedReports = reports.map(r => {
-    const w = watchMap.get(r.report_no);
-    const key = [r.city, r.district, r.community].filter(Boolean).join('·');
-    const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
-    return {
-      ...r,
-      coords,
-      state: w ? w.state : (r.state || '已评估'),
-      watchlist_note: w ? w.note : '',
-    };
-  });
+  const mergedReports = reports
+    .filter(r => r.provenance !== 'void')
+    .map(r => {
+      const w = watchMap.get(r.report_no);
+      const key = [r.city, r.district, r.community].filter(Boolean).join('·');
+      const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
+      const wScore = w ? num(w.score) : null;
+      return {
+        ...r,
+        coords,
+        score_global: (w && wScore != null) ? wScore : (r.score_global ?? null),
+        watchlist_note: w ? w.note : '',
+        authenticity: w ? (w.authenticity || 'verified') : (r.provenance === 'suspect' ? 'suspect' : 'verified'),
+      };
+    });
 
   return {
     reports: mergedReports,
-    watchlist: watchlist || [],
-    states,
+    watchlist: (watchlist || []).filter(w => w.authenticity !== 'void'),  // ⛔作废行是历史记录，不上图
     profile: parsedProfile,
     rawYaml: rawProfile,
     geoCache,
@@ -231,7 +235,7 @@ async function main() {
 
   server.listen(servePort, () => {
     const url = `http://localhost:${servePort}`;
-    console.log(`🚀 购房决策地图本地服务已启动: ${url}`);
+    console.log(`🚀 房源地图本地服务已启动: ${url}`);
     console.log(`💡 在页面修改需求将自动持久化到 config/profile.yml`);
     console.log(`按 Ctrl+C 退出服务`);
 

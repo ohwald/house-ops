@@ -1,7 +1,7 @@
 // lib/data.mjs — stats.mjs 与 dashboard.mjs 共享的数据解析层
 // 契约：Machine Summary 的 YAML fence 紧跟 `## Machine Summary` 标题行，
 //       schema SoT 是 modes/evaluate.md（键名变更需同步本文件与该文件）。
-// 依赖：零依赖。YAML 只做行级解析（`key: value` 标量）；states.yml 只提取 canonical 行。
+// 依赖：零依赖。YAML 只做行级解析（`key: value` 标量）。
 
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -22,14 +22,23 @@ export function parseMachineSummary(text) {
     else if (v === 'true') v = true;
     else if (v === 'false') v = false;
     else if (/^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
+    else if (v.startsWith('[') && v.endsWith(']')) {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        v = v.slice(1, -1).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+      }
+    }
     else v = v.replace(/^["']|["']$/g, '');
     obj[m[1]] = v;
   }
   return obj;
 }
 
-// 只取主报告（001-xxx-日期.md），排除 -deep / -negotiate 附录报告，避免同一编号重复计数
-export async function collectReports(reportsDir) {
+// 只取主报告（001-xxx-日期.md），排除 -deep / -negotiate 附录报告，避免同一编号重复计数。
+// 强约束（ADR-0002）：provenance === 'void' 的作废报告默认对所有消费方不可见——
+// 新增数据消费入口时不要自行 opt-in；确需审计作废数据时才显式传 includeVoid: true。
+export async function collectReports(reportsDir, { includeVoid = false } = {}) {
   const files = (await readdir(reportsDir).catch(() => []))
     .filter(f => /^\d{3}-.+\.md$/.test(f))
     .filter(f => !/-(deep|negotiate)\.md$/.test(f));
@@ -37,40 +46,42 @@ export async function collectReports(reportsDir) {
   for (const f of files) {
     const text = await readFile(join(reportsDir, f), 'utf8');
     const ms = parseMachineSummary(text);
-    if (ms) rows.push({ file: f, ...ms });
+    if (ms) rows.push({ file: f, provenance: 'legacy', ...ms });
   }
-  return rows;
+  return includeVoid ? rows : rows.filter(r => r.provenance !== 'void');
 }
 
 // ---------- Watchlist（markdown 表格） ----------
+// 列结构 SoT：modes/watchlist.md。无状态列——交易状态跟踪已移除（ADR-0001）。
+// 真实性三态（ADR-0002）：备注首标记 ⛔=作废/虚构、⚠️=存疑未核实、✅=已实采验证；无标记=legacy（幻觉批次前的旧数据，按存疑对待）
 
-export async function parseWatchlist(watchlistPath) {
+export function authenticityFromNote(note = '') {
+  const t = String(note ?? '').trim();
+  if (t.startsWith('⛔')) return 'void';
+  if (t.startsWith('⚠️')) return 'suspect';
+  if (t.startsWith('✅')) return 'verified';
+  return 'legacy';
+}
+
+export async function parseWatchlist(watchlistPath, { includeVoid = false } = {}) {
   if (!(await readFile(watchlistPath, 'utf8').catch(() => null))) return null;
   const lines = (await readFile(watchlistPath, 'utf8')).split('\n');
   const rows = [];
   for (const line of lines) {
     if (!line.startsWith('|') || line.includes('---') || line.includes('编号')) continue;
-    // [| 空, 编号, 小区, 城市板块, 类型, 总价, Global, 风险, 状态, 首次, 最近, 备注, 空](尾空)
+    // [| 空, 编号, 小区, 城市板块, 类型, 总价, Global, 风险, 首次, 最近, 备注, 空](尾空)
     const c = line.split('|').map(x => x.trim());
     if (!/^\d{3}$/.test(c[1] ?? '')) continue;
+    const note = c[10] ?? '';
     rows.push({
       no: c[1], community: c[2] ?? '', district: c[3] ?? '', type: c[4] ?? '',
-      price: c[5] ?? '', score: c[6] ?? '', risk: c[7] ?? '', state: c[8] ?? '',
-      note: c[11] ?? '',
+      price: c[5] ?? '', score: c[6] ?? '', risk: c[7] ?? '',
+      note,
+      authenticity: authenticityFromNote(note),
     });
   }
-  return rows;
-}
-
-// ---------- 状态机（templates/states.yml，提取 canonical 名与文件顺序） ----------
-
-export async function readStates(statesPath) {
-  const yml = await readFile(statesPath, 'utf8').catch(() => '');
-  const states = [];
-  const re = /^-\s*canonical:\s*(.+?)\s*$/gm;
-  let m;
-  while ((m = re.exec(yml))) states.push(m[1]);
-  return states;
+  // 强约束（ADR-0002）：⛔作废行默认对所有消费方不可见（历史记录保留在文件里）
+  return includeVoid ? rows : rows.filter(r => r.authenticity !== 'void');
 }
 
 // 读取单套房源报告详情
@@ -85,33 +96,4 @@ export async function readReportDetail(reportsDir, reportNo) {
   return { file: files[0], filePath, text, url };
 }
 
-// 原子更新 watchlist 状态与更新日期
-export async function updateWatchlistState(watchlistPath, reportNo, newState) {
-  const content = await readFile(watchlistPath, 'utf8').catch(() => null);
-  if (!content) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  const lines = content.split('\n');
-  let updated = false;
-  const newLines = lines.map(line => {
-    if (!line.startsWith('|') || line.includes('---') || line.includes('编号')) return line;
-    const parts = line.split('|');
-    if (parts.length < 10) return line;
-    const no = parts[1].trim();
-    if (no === reportNo) {
-      parts[8] = ` ${newState} `;
-      if (parts.length > 10) {
-        parts[10] = ` ${today} `;
-      }
-      updated = true;
-      return parts.join('|');
-    }
-    return line;
-  });
-  if (updated) {
-    const { writeFile } = await import('node:fs/promises');
-    await writeFile(watchlistPath, newLines.join('\n'), 'utf8');
-    return true;
-  }
-  return false;
-}
 
