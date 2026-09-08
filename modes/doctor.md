@@ -6,7 +6,7 @@
 
 逐项输出 `✅ / ⚠️ / ⛔ + 一句话`：
 
-1. **系统层完整性**：`AGENTS.md`、`CLAUDE.md`、`modes/_shared.md`、五个核心模式文件、`templates/states.yml`、`templates/policy-notes.cn.yml` 存在且非空。
+1. **系统层完整性**：`AGENTS.md`、`CLAUDE.md`、`modes/_shared.md`、各模式文件、`templates/policy-notes.cn.yml`、`templates/official-sources.cn.yml` 存在且非空。
 2. **技能链接**：`.claude/skills/house-ops`、`.zcode/skills/house-ops` 符号链接可解析到 `.agents/skills/house-ops/SKILL.md`。
 3. **用户层状态**：
    - `config/profile.yml` 存在？（缺失 → 建议先跑 intake）
@@ -15,11 +15,9 @@
 4. **数据一致性**：
    - `data/watchlist.md` 每行编号在 `reports/` 有对应报告？（孤儿行 → 列出）
    - `reports/` 每份报告在 watchlist 有登记？（漏登记 → 列出并问是否补）
-   - watchlist 状态列是否全部为 `templates/states.yml` canonical 名？
 5. **时效性**：
    - `templates/policy-notes.cn.yml` 整体 as_of 距今 > 90 天 → ⚠️ 提醒核实更新。
-   - watchlist 中 `谈判中/已认购` 状态超 30 天未动的行 → ⚠️ 提醒跟进。
-   - 状态为已评估但超 60 天未推进的房源 → 提示可汇总到 stats 检视。
+   - 备注含「已看房」但超 60 天无新进展（无二看/谈判备注）的房源 → 提示可汇总到 stats 检视。
 6. **可选脚本**：`node scripts/doctor.mjs` 能否正常运行（Node 环境可用性）。
 
 ## 输出
