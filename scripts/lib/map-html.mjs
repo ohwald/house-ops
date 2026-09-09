@@ -523,6 +523,32 @@ export function renderMapHtml({ initialData, config = {} }) {
       gap: 6px;
     }
 
+    /* ── 三句话观点块 ── */
+    .summary-block {
+      background: var(--bg-inset);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-left: 3px solid var(--brand);
+      border-radius: var(--radius-m);
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+    .sum-line { display: flex; gap: 8px; align-items: flex-start; }
+    .sum-tag {
+      flex-shrink: 0;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 5px;
+      background: rgba(10, 132, 255, 0.18);
+      color: #6cb8ff;
+    }
+    .sum-tag.tag-cost { background: rgba(255, 159, 10, 0.16); color: #ffb340; }
+    .sum-tag.tag-verdict { background: rgba(48, 209, 88, 0.16); color: #4ade80; }
+
     /* ── 地图 Marker（系统色、无过冲悬停） ── */
     .leaflet-div-icon { background: transparent !important; border: none !important; }
     .map-marker {
@@ -876,6 +902,14 @@ export function renderMapHtml({ initialData, config = {} }) {
           <div style="font-size:0.72rem; color:var(--text-muted);">面积</div>
           <div style="font-weight:700; color:#f8fafc;" id="m-area">-- ㎡</div>
         </div>
+      </div>
+
+      <!-- 三句话观点：事实 → 代价 → 结论（数字优先，拒绝空话） -->
+      <div class="summary-block">
+        <div class="section-headline">📝 三句话观点</div>
+        <div class="sum-line"><span class="sum-tag">事实</span><span id="s-fact">--</span></div>
+        <div class="sum-line"><span class="sum-tag tag-cost">代价</span><span id="s-cost">--</span></div>
+        <div class="sum-line"><span class="sum-tag tag-verdict">结论</span><span id="s-verdict">--</span></div>
       </div>
 
       <!-- 支柱一：政策解读与交易成本 -->
@@ -1526,6 +1560,24 @@ export function renderMapHtml({ initialData, config = {} }) {
       badge.textContent = h.score_global != null ? h.score_global : '无分';
       badge.className = 'score-badge ' + ((h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass') ? 'score-low'
         : (h.score_global >= 4.0) ? 'score-high' : 'score-mid');
+
+      // ── 三句话观点：事实 → 代价 → 结论（数字优先；观点以 watchlist 备注为 SoT） ──
+      const days = h.listed_at ? Math.max(0, Math.round((Date.now() - new Date(h.listed_at)) / 86400000)) : null;
+      const factBits = [];
+      if (h.score_global != null) factBits.push('Global ' + h.score_global);
+      if (h.total_price_wan != null) factBits.push('挂牌 ' + h.total_price_wan + ' 万');
+      if (h.unit_price != null) factBits.push(h.unit_price.toLocaleString() + ' 元/㎡');
+      if (days != null) factBits.push('已挂牌 ' + days + ' 天');
+      if (h.viewings_30d != null) factBits.push('30 天带看 ' + h.viewings_30d + ' 次');
+      document.getElementById('s-fact').textContent = factBits.join(' · ') || '--';
+      const costBits = [];
+      if (h.hard_dq_hit) costBits.push('硬性 DQ 命中（封顶 2.5）');
+      if (h.risk_tier && h.risk_tier !== 'low') costBits.push('风险 ' + h.risk_tier);
+      const uv = (h.unverified_items && h.unverified_items.length) ? h.unverified_items.length : 0;
+      if (uv) costBits.push(uv + ' 项待核实');
+      if (h.authenticity === 'suspect') costBits.push('真实性存疑（数据未实采核验）');
+      document.getElementById('s-cost').textContent = costBits.join('；') || '无已知代价';
+      document.getElementById('s-verdict').textContent = h.watchlist_note || h.next_action || '暂无观点备注——建议先 scan 验真';
 
       const isAdded = selectedCompareNos.includes(h.report_no);
       document.getElementById('m-btn-add-compare').textContent = isAdded ? '✓ 已加入方案对比' : '＋ 加入方案对比';

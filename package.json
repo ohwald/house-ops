@@ -8,6 +8,7 @@
     "doctor": "node scripts/doctor.mjs",
     "reserve": "node scripts/reserve-report-num.mjs",
     "scan": "node scripts/scan.mjs",
+    "insight": "node scripts/insight.mjs",
     "selftest": "node scripts/selftest.mjs",
     "stats": "node scripts/stats.mjs",
     "dashboard": "node scripts/dashboard.mjs",

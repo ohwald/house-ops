@@ -12,6 +12,7 @@ import {
   verifyAuthenticity,
 } from '../scrapers/_fields.mjs';
 import { authenticityFromNote } from './lib/data.mjs';
+import { solarElevation, noiseLevelAt } from './insight.mjs';
 import { loadScrapers, detectPlatform, liftMobileCity } from '../scrapers/_registry.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -227,6 +228,22 @@ const baseRec = (over = {}) => ({
     { community_exists: true, community_avg_unit_price: 48500, listing_seen_in_source: true, community_ownership: '商品房' });
   eq('全证据齐 → verified', r.provenance_suggestion, 'verified');
   eq('价格偏差 +1% pass', r.checks.find(c => c.id === 'price_vs_avg').status, 'pass');
+}
+
+// ---------- 物理交叉验证（insight.mjs 纯数学，无网络依赖） ----------
+
+{
+  const winter = solarElevation(31.23, '2026-12-21', 12);
+  const dahan = solarElevation(31.23, '2027-01-20', 12);
+  const summer = solarElevation(31.23, '2027-06-21', 12);
+  eq('上海冬至正午太阳高度角（公开天文值≈35.3°）', Math.round(winter * 10) / 10, 35.3);
+  eq('上海大寒日正午（≈38.5°）', Math.round(dahan * 10) / 10, 38.6);
+  has('夏至显著更高（>80°）', summer > 80);
+  // 影长系数：冬至 1/tan(35.34°) ≈ 1.41 倍楼高
+  eq('冬至影长系数 1.41×楼高', Math.round((1 / Math.tan(winter * Math.PI / 180)) * 100) / 100, 1.41);
+  // 线声源衰减：次干道 65dB@20m → 95m 处 ≈ 58.2dB
+  eq('噪音 95m 衰减（65→58dB）', noiseLevelAt(65, 95), 58);
+  eq('噪音 20m 基准不衰减', noiseLevelAt(70, 20), 70);
 }
 
 // ---------- schema 元数据（issue #3 枚举同步的锚点） ----------
