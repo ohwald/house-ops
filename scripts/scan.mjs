@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScrapers, detectPlatform } from '../scrapers/_registry.mjs';
 import { COMMON_LISTING_FIELDS, normalizeRecord, finalizeRecord, buildEntityHistory, matchRecord, verifyAuthenticity } from '../scrapers/_fields.mjs';
+import { analyze } from './analysis.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -151,6 +152,32 @@ async function cmdHistory(arg) {
   }
 }
 
+// 分类分析：六大类型（户型/流动性/日照采光/噪音/价格/真实性）结论 + 三句话观点提炼
+async function cmdAnalyze(arg, evPath) {
+  if (!arg) {
+    console.error('用法: node scripts/scan.mjs analyze <record.json> [--evidence evidence.json] [--population 4]');
+    process.exit(1);
+  }
+  const record = await readJsonInput(arg);
+  let evidence = {};
+  if (evPath) {
+    try { evidence = JSON.parse(await readFile(evPath, 'utf8')); }
+    catch { console.error('⛔ 证据文件不是合法 JSON'); process.exit(1); }
+  }
+  const popIdx = process.argv.indexOf('--population');
+  const profile = { population: popIdx > 0 ? Number(process.argv[popIdx + 1]) || 4 : 4 };
+  const result = analyze(record, { evidence, profile });
+  for (const [type, list] of Object.entries(result.findings)) {
+    console.log(`\n「${type}」`);
+    for (const x of list) console.log(`  [${x.level.toUpperCase().padEnd(4)}] ${x.title}${x.detail ? ' — ' + x.detail : ''}`);
+  }
+  console.log(`\n「观点提炼」`);
+  console.log(`  事实：${result.viewpoint.fact}`);
+  console.log(`  代价：${result.viewpoint.cost}`);
+  console.log(`  结论：${result.viewpoint.verdict}`);
+  console.log(`\nprovenance: ${result.record.provenance ?? '(未定)'}`);
+}
+
 // 真实性验证：AI 采集证据（小区库/在售列表/政府公示），判定表由脚本执行（零 token、可测试）
 async function cmdVerify(arg, evPath) {
   if (!arg) {
@@ -229,15 +256,19 @@ async function cmdOfficial(city) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial, history: cmdHistory, match: cmdMatch, verify: cmdVerify };
+const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial, history: cmdHistory, match: cmdMatch, verify: cmdVerify, analyze: cmdAnalyze };
 if (!cmd || !main[cmd]) {
-  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official|history|match|verify> …（详见本文件头注释与 modes/scan.md）');
+  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official|history|match|verify|analyze> …（详见本文件头注释与 modes/scan.md）');
   process.exit(1);
 }
 if (cmd === 'crosscheck') await cmdCrosscheck(rest[0], rest.includes('--write'));
 else if (cmd === 'verify') {
   const evIdx = rest.indexOf('--evidence');
   await cmdVerify(rest[0], evIdx >= 0 ? rest[evIdx + 1] : undefined);
+}
+else if (cmd === 'analyze') {
+  const evIdx = rest.indexOf('--evidence');
+  await cmdAnalyze(rest[0], evIdx >= 0 ? rest[evIdx + 1] : undefined);
 }
 else if (cmd === 'detect') await cmdDetect(rest);
 else await main[cmd](rest.find((a) => !a.startsWith('--')));

@@ -12,6 +12,7 @@ import {
   verifyAuthenticity,
 } from '../scrapers/_fields.mjs';
 import { authenticityFromNote } from './lib/data.mjs';
+import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
 import { loadScrapers, detectPlatform, liftMobileCity } from '../scrapers/_registry.mjs';
 
@@ -244,6 +245,35 @@ const baseRec = (over = {}) => ({
   // 线声源衰减：次干道 65dB@20m → 95m 处 ≈ 58.2dB
   eq('噪音 95m 衰减（65→58dB）', noiseLevelAt(65, 95), 58);
   eq('噪音 20m 基准不衰减', noiseLevelAt(70, 20), 70);
+}
+
+// ---------- 分类分析引擎（012 案例复刻：户型/流动性/观点提炼） ----------
+
+{
+  const rec = {
+    schema: 'house-ops.scan/1', scanned_at: '2026-09-04', platform: 'lianjia',
+    community: '示范海棠湾(三期)', district: '浦东·周浦',
+    listing: { total_price_wan: 480, unit_price: 47525, area_sqm: 101, layout: '3室1厅',
+               floor: '低楼层/共18层', listed_at: '2026-06-01', viewings_30d: 193, ownership: '商品房/满五年' },
+    transactions: [{ community: 'X', area_sqm: 99.54, deal_date: '2026-06-28', reliability: '成交数据' }],
+  };
+  const evidence = {
+    layout_rooms: [{ name: '客厅', area: 31.2 }, { name: '卧室A', area: 13.5 }, { name: '卧室B', area: 11.6 },
+                   { name: '卧室C', area: 6.7 }, { name: '厨房', area: 4.1 }, { name: '卫生间', area: 3.2 }],
+    bathrooms: 1, layout_shape: '刀把形', population: 4, community_avg_unit_price: 53924,
+  };
+  const r = analyze(rec, { evidence, profile: { population: 4 } });
+  const layoutTitles = r.findings['户型'].map((x) => x.level + ':' + x.title);
+  has('户型：伪多房判别（BAD）', layoutTitles.some((t) => t.startsWith('bad:伪多房')));
+  has('户型：单卫判别（WARN）', layoutTitles.some((t) => t.startsWith('warn:全屋单卫')));
+  has('户型：刀把形判别（WARN）', layoutTitles.some((t) => t.startsWith('warn:户型形状不规则')));
+  const liq = r.findings['流动性'].map((x) => x.title).join(',');
+  has('流动性：脱敏成交不当作 0 套', !/成交 0 套/.test(liq));
+  const price = r.findings['价格'].map((x) => x.level + ':' + x.title).join(',');
+  has('价格：低于均价 11.9% 判 good', price.includes('good:挂牌低于小区均价 11.9%'));
+  eq('观点提炼：事实句', r.viewpoint.fact, '示范海棠湾(三期) · 挂牌 480 万 · 47,525 元/㎡ · 101㎡ 3室1厅 · 已挂牌 100 天 · 30 天带看 193 次');
+  has('观点提炼：代价句含伪多房', /伪多房/.test(r.viewpoint.cost));
+  has('观点提炼：结论句含备注观点', r.viewpoint.verdict.length > 10);
 }
 
 // ---------- schema 元数据（issue #3 枚举同步的锚点） ----------
