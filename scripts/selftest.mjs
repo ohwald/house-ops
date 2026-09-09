@@ -14,6 +14,7 @@ import {
 import { authenticityFromNote } from './lib/data.mjs';
 import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
+import { buildEvidenceName, evidenceDirFor, evidenceEntry, EVIDENCE_TYPES } from './evidence.mjs';
 import { loadScrapers, detectPlatform, liftMobileCity } from '../scrapers/_registry.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -275,6 +276,15 @@ const baseRec = (over = {}) => ({
   has('观点提炼：代价句含伪多房', /伪多房/.test(r.viewpoint.cost));
   has('观点提炼：结论句含备注观点', r.viewpoint.verdict.length > 10);
 }
+
+// ---------- 证据归档（evidence.mjs 纯函数） ----------
+
+eq('证据命名（日期+类型+说明slug）', buildEvidenceName({ captured_at: '2026-09-09', type: 'huxing', note: '1440px 框架图', src: '/tmp/x.png' }), '20260909-huxing-1440px-框架图.png');
+eq('无说明则省略 slug', buildEvidenceName({ captured_at: '2026-09-09', type: 'photo', src: 'https://x/a.jpg' }), '20260909-photo.jpg');
+eq('policy_pdf 归共享目录', evidenceDirFor({ type: 'policy_pdf', platform: 'lianjia', listing_id: '1' }, { evidenceDir: 'EV', policyDir: 'PL' }), join('PL'));
+eq('房源级归房源目录（含子目录）', evidenceDirFor({ type: 'huxing', platform: 'lianjia', listing_id: '107' }, { evidenceDir: 'EV', policyDir: 'PL' }), join('EV', 'lianjia-107'));
+eq('登记项字段', Object.keys(evidenceEntry({ type: 'huxing', relPath: 'a.png', src: 'https://x', captured_at: '2026-09-09' })).sort().join(','), 'captured_at,note,path,source_url,type');
+has('类型白名单含 huxing/gov_notice', EVIDENCE_TYPES.includes('huxing') && EVIDENCE_TYPES.includes('gov_notice'));
 
 // ---------- schema 元数据（issue #3 枚举同步的锚点） ----------
 

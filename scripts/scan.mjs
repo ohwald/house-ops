@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScrapers, detectPlatform } from '../scrapers/_registry.mjs';
 import { COMMON_LISTING_FIELDS, normalizeRecord, finalizeRecord, buildEntityHistory, matchRecord, verifyAuthenticity } from '../scrapers/_fields.mjs';
+import { evidenceSave, EVIDENCE_TYPES } from './evidence.mjs';
 import { analyze } from './analysis.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -152,6 +153,45 @@ async function cmdHistory(arg) {
   }
 }
 
+// 证据归档：户型图/政府公示/政策 PDF 等文件落盘 + 登记进扫描记录 evidence 数组
+async function cmdEvidence(argv) {
+  const action = argv[0];
+  if (action === 'save') {
+    const recPath = argv[1], type = argv[2], src = argv[3];
+    const noteIdx = argv.indexOf('--note');
+    const nameIdx = argv.indexOf('--name');
+    const refererIdx = argv.indexOf('--referer');
+    if (!recPath || !type || !src) {
+      console.error('用法: node scripts/scan.mjs evidence save <record.json> <type> <文件路径或URL> [--note 备注] [--name 自定义文件名] [--referer URL]');
+      console.error(`  type ∈ ${EVIDENCE_TYPES.join(' | ')}`);
+      process.exit(1);
+    }
+    const out = await evidenceSave({
+      recordPath: recPath, type, src,
+      note: noteIdx > 0 ? argv[noteIdx + 1] : '',
+      name: nameIdx > 0 ? argv[nameIdx + 1] : '',
+      referer: refererIdx > 0 ? argv[refererIdx + 1] : '',
+      scansDir: join(ROOT, 'data', 'scans'),
+      evidenceDir: join(ROOT, 'data', 'evidence'),
+      policyDir: join(ROOT, 'data', 'policy'),
+    });
+    console.log(`✅ 已归档: ${out.savedPath}`);
+    console.log(`   evidence[${out.index}] type=${out.entry.type} → 记录已更新`);
+    return;
+  }
+  if (action === 'list') {
+    const recPath = argv[1];
+    if (!recPath) { console.error('用法: node scripts/scan.mjs evidence list <record.json>'); process.exit(1); }
+    const rec = await readJsonInput(recPath);
+    const items = rec.evidence ?? [];
+    if (!items.length) { console.log('（该记录暂无归档证据）'); return; }
+    for (const [i, e] of items.entries()) console.log(`  [${i}] ${e.type} ${e.path}${e.note ? ' — ' + e.note : ''}（${e.captured_at}）`);
+    return;
+  }
+  console.error('用法: node scripts/scan.mjs evidence <save|list> …');
+  process.exit(1);
+}
+
 // 分类分析：六大类型（户型/流动性/日照采光/噪音/价格/真实性）结论 + 三句话观点提炼
 async function cmdAnalyze(arg, evPath) {
   if (!arg) {
@@ -256,9 +296,9 @@ async function cmdOfficial(city) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial, history: cmdHistory, match: cmdMatch, verify: cmdVerify, analyze: cmdAnalyze };
+const main = { detect: cmdDetect, normalize: cmdNormalize, crosscheck: cmdCrosscheck, official: cmdOfficial, history: cmdHistory, match: cmdMatch, verify: cmdVerify, analyze: cmdAnalyze, evidence: cmdEvidence };
 if (!cmd || !main[cmd]) {
-  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official|history|match|verify|analyze> …（详见本文件头注释与 modes/scan.md）');
+  console.error('用法: node scripts/scan.mjs <detect|normalize|crosscheck|official|history|match|verify|analyze|evidence> …（详见本文件头注释与 modes/scan.md）');
   process.exit(1);
 }
 if (cmd === 'crosscheck') await cmdCrosscheck(rest[0], rest.includes('--write'));
@@ -270,5 +310,6 @@ else if (cmd === 'analyze') {
   const evIdx = rest.indexOf('--evidence');
   await cmdAnalyze(rest[0], evIdx >= 0 ? rest[evIdx + 1] : undefined);
 }
+else if (cmd === 'evidence') await cmdEvidence(rest);
 else if (cmd === 'detect') await cmdDetect(rest);
 else await main[cmd](rest.find((a) => !a.startsWith('--')));

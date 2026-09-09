@@ -17,6 +17,8 @@
 | `node scripts/scan.mjs history [关键词] [--stale-days N]` | 无参=房源实体时效表（跨平台/重挂归并）；关键词=单实体时间线与策略信号 |
 | `node scripts/scan.mjs match <record.json>` | 新扫描 vs 全库指纹匹配：识别跨平台同源挂牌与下架重挂 |
 | `node scripts/scan.mjs verify <record.json> [--evidence ev.json]` | 真实性验证判定表：URL实访/小区存在性/挂牌存在性/价格vs均价/单价一致性/满五交叉/混居判别 → provenance 建议 |
+| `node scripts/scan.mjs evidence save <record> <type> <file/URL> [--note ..] [--referer ..]` | 证据文件归档（复制/下载→规范路径→登记进记录） |
+| `node scripts/scan.mjs evidence list <record.json>` | 列出该记录已归档的证据 |
 
 ## Step 0 — 平台识别
 
@@ -49,6 +51,9 @@
   "page_type": "listing|transaction|transaction_list|community|new_home|market|search|unknown",
   "url": "",
   "capture": { "channel": "browser|webfetch|snapshot|user_paste", "captured_at": "", "url_verified": true },
+  "evidence": [
+    { "type": "huxing|photo|gov_notice|policy_pdf|screenshot|other", "path": "data/evidence/...", "source_url": "", "captured_at": "", "note": "" }
+  ],
   "listing_id": null,
   "city": "",
   "city_code": "",
@@ -141,6 +146,16 @@
    - 新扫描落库前跑 `node scripts/scan.mjs match <record.json>`：高置信命中 → 归并同一实体历史，报告与沟通中标注"同源挂牌"并对比各键价差；多平台同源但价差明显 → 标记**引流盘嫌疑**；
    - 实体内某挂牌键消失 + 新键价格跳变 = **重挂重定价**信号（换壳盘常见手法：下架→加价/换经纪→重挂）；
    - `history` 默认按实体聚合输出（一个实体 = 一套房，下挂多个挂牌键），`_custom.md` 可覆盖时效阈值。
+
+## 证据归档（结构化信息要落盘：户型图/政府公示 PDF/网页快照）
+
+户型图、政府公示 PDF、规划截图这类**证据文件本身是资产**——读过就丢等于没验证。归档规则：
+
+- **房源级**：`data/evidence/{platform}-{listing_id}/{YYYYMMDD}-{type}[-{说明}].{ext}`（户型图/实拍/产调扫描/公示快照）
+- **共享级**：`data/policy/{YYYYMMDD}-{type}[-{说明}].{ext}`（政策 PDF/规划公示等非单房源文件）
+- 登记进扫描记录 `evidence` 数组（type/path/source_url/captured_at/note），verify 与报告引用时给相对路径
+- 归档命令：`node scripts/scan.mjs evidence save <record.json> huxing /tmp/户型图.png --note "1440px框架图"`（URL 直下；防盗链时先浏览器另存为本地文件）
+- 类型白名单：`huxing | photo | gov_notice | policy_pdf | screenshot | other`
 
 ## 分类分析引擎（analysis.mjs + `scan.mjs analyze`）
 

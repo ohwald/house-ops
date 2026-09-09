@@ -14,7 +14,7 @@
 
 **Gate — 信息充分性**：以下 5 项至少齐 4 项才进入评分：城市+区/板块、总价或单价、面积、户型、楼层/房龄任一。不足时列出缺口请用户补充。
 
-**Gate — 来源真实性（反幻觉，先于一切评分）**：① 房源 URL 必须实际访问——重定向到首页/搜索页 = 占位符；② 小区必须在链家/贝壳小区库可检索到。两者任一失败且用户无法提供真实来源 → **报告作废**（不是降权），watchlist 标注「报告作废」。**机械判定跑 `node scripts/scan.mjs verify <record.json> --evidence <实采证据.json>`**（判定表见 modes/scan.md；provenance_suggestion 写入 Machine Summary）。定稿时把核验结果写进 Machine Summary 的 `provenance` 字段（统计/清单按此过滤：void 不参与统计与默认展示）。报告内每个关键事实带来源标记：`[实采]`（本会话抓取，URL 可复核）/ `[政务]`（政府背书，带 as_of）/ `[用户提供]` / `[未核实]`——无标记的关键数据不得出现在评分依据里；「已核验」类表述若本会话未实际验证，一律改为「未核实」。
+**Gate — 来源真实性（反幻觉，先于一切评分）**：① 房源 URL 必须实际访问——重定向到首页/搜索页 = 占位符；② 小区必须在链家/贝壳小区库可检索到。两者任一失败且用户无法提供真实来源 → **报告作废**（不是降权），watchlist 标注「报告作废」。**机械判定跑 `node scripts/scan.mjs verify <record.json> --evidence <实采证据.json>`**（判定表见 modes/scan.md；provenance_suggestion 写入 Machine Summary）。定稿时把核验结果写进 Machine Summary 的 `provenance` 字段（统计/清单按此过滤：void 不参与统计与默认展示）。**证据文件（户型图/政府公示 PDF/快照）用 `scan.mjs evidence save` 归档至 `data/evidence/`，报告引用相对路径**。报告内每个关键事实带来源标记：`[实采]`（本会话抓取，URL 可复核）/ `[政务]`（政府背书，带 as_of）/ `[用户提供]` / `[未核实]`——无标记的关键数据不得出现在评分依据里；「已核验」类表述若本会话未实际验证，一律改为「未核实」。
 
 ## Step 1 — 房源类型检测与营销噪音过滤
 
