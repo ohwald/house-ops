@@ -715,22 +715,6 @@ export function renderMapHtml({ initialData, config = {} }) {
       <div class="brand-badge">免 Key 纯净版</div>
     </div>
 
-    <!-- 地图 Marker 视角切换 -->
-    <div class="view-mode-bar">
-      <button class="view-mode-btn active" id="btn-vm-score" onclick="setMarkerViewMode('score')">
-        <span>⭐ 综合评级</span>
-      </button>
-      <button class="view-mode-btn" id="btn-vm-trend" onclick="setMarkerViewMode('trend')">
-        <span>📉 历史走势&折价</span>
-      </button>
-      <button class="view-mode-btn" id="btn-vm-policy" onclick="setMarkerViewMode('policy')">
-        <span>🏛️ 政策税费精算</span>
-      </button>
-      <button class="view-mode-btn" id="btn-vm-planning" onclick="setMarkerViewMode('planning')">
-        <span>🏗️ 规划兑现与变数</span>
-      </button>
-    </div>
-
     <div class="header-stats">
       <div class="stat-pill" id="pill-all" onclick="setDecisionFilter('all')">
         <span>全部</span>
@@ -854,6 +838,47 @@ export function renderMapHtml({ initialData, config = {} }) {
           </div>
         </div>
 
+        <!-- 排序 -->
+        <div class="filter-group">
+          <div class="filter-label"><span>排序</span></div>
+          <select class="basemap-select" id="sort-select" style="width:100%" onchange="setSortMode(this.value)">
+            <option value="score">综合评分（高→低）</option>
+            <option value="unit">单价（低→高）</option>
+            <option value="total">总价（低→高）</option>
+            <option value="area">面积（大→小）</option>
+            <option value="year">房龄（新→旧）</option>
+            <option value="location">地段配套（高→低）</option>
+          </select>
+        </div>
+
+        <!-- 单价区间 -->
+        <div class="filter-group">
+          <div class="filter-label"><span>单价区间 (元/㎡)</span></div>
+          <div class="range-inputs">
+            <input type="number" id="filter-unit-min" placeholder="最低" oninput="applyFilters()">
+            <span style="color:var(--text-muted)">-</span>
+            <input type="number" id="filter-unit-max" placeholder="最高" oninput="applyFilters()">
+          </div>
+        </div>
+
+        <!-- 房龄上限 -->
+        <div class="filter-group">
+          <div class="filter-label"><span>房龄上限（年）</span></div>
+          <div class="range-inputs">
+            <input type="number" id="filter-age-max" placeholder="如 15（留空不限）" oninput="applyFilters()">
+          </div>
+        </div>
+
+        <!-- 楼层段 -->
+        <div class="filter-group">
+          <div class="filter-label">楼层段（可多选）</div>
+          <div class="chip-container" id="floor-chips">
+            <div class="chip" onclick="toggleFloorChip('低')">低楼层</div>
+            <div class="chip" onclick="toggleFloorChip('中')">中楼层</div>
+            <div class="chip" onclick="toggleFloorChip('高')">高楼层</div>
+          </div>
+        </div>
+
         <!-- 当前符合条件的房源列表 -->
         <div class="filter-group">
           <div class="filter-label">
@@ -868,14 +893,10 @@ export function renderMapHtml({ initialData, config = {} }) {
     </div>
 
     <!-- 底部已选方案对比托盘 (Compare Tray) -->
-    <div class="compare-tray" id="compare-tray">
-      <div style="font-size:0.82rem; font-weight:700; color:#fff;">已选对比方案 (<span id="compare-count">0</span>/4):</div>
-      <div class="compare-chips" id="compare-chips"></div>
-      <button class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem;" onclick="openCompareModal()">
-        ⚖️ 查看方案权衡矩阵
-      </button>
-      <button class="btn" style="padding:4px 8px; font-size:0.75rem;" onclick="clearCompareSelection()">清空</button>
-    </div>
+    <!-- 悬浮对比按钮（从详情卡「加入对比」累计，≥1 套时出现） -->
+    <button class="compare-fab" id="compare-fab" onclick="openCompareModal()" style="display:none;">
+      ⚖️ 方案对比 <span id="compare-fab-count">0</span>
+    </button>
 
     <!-- 右下角选中的房源详情卡片 -->
     <div class="report-modal" id="report-modal">
@@ -1063,9 +1084,10 @@ export function renderMapHtml({ initialData, config = {} }) {
     let workMarker = null;
     let commuteCircle = null;
 
-    let markerViewMode = 'score';
     let filterDecision = 'rec';  // 默认展示第一梯队（高分直接可见）
     let excludeRejected = true; // 默认隐藏已排除房源（用户要看的是高分与备选）
+    let sortKey = 'score';
+    const floorSel = new Set(); // 空集合 = 不限楼层段
     let showCommuteRange = true;
     let showPlanningLayer = true;
     let scoreFloor = 0;
@@ -1245,14 +1267,10 @@ export function renderMapHtml({ initialData, config = {} }) {
         showToast('已加载深度分析演示样例数据', 2500);
       }
 
-      if (houses.length >= 2) {
-        selectedCompareNos = [houses[0].report_no, houses[1].report_no];
-      }
-
       initProfileForm();
       updateStatsHeader();
-      updateCompareTray();
-      renderHouseList();
+      updateCompareFab();
+      applyFilters();
 
       initLeafletMap();
     }
@@ -1365,15 +1383,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       updateStatsHeader();
       applyFilters();
       refreshMapMarkers();
-      updateCompareTray();
-    }
-
-    function setMarkerViewMode(mode) {
-      markerViewMode = mode;
-      ['score', 'trend', 'policy', 'planning'].forEach(k => {
-        document.getElementById('btn-vm-' + k).classList.toggle('active', k === mode);
-      });
-      refreshMapMarkers();
+      updateCompareFab();
     }
 
     function initProfileForm() {
@@ -1460,6 +1470,11 @@ export function renderMapHtml({ initialData, config = {} }) {
       const aMin = parseFloat(document.getElementById('filter-area-min').value) || null;
       const aMax = parseFloat(document.getElementById('filter-area-max').value) || null;
 
+      const uMin = parseFloat(document.getElementById('filter-unit-min')?.value) || null;
+      const uMax = parseFloat(document.getElementById('filter-unit-max')?.value) || null;
+      const ageMax = parseFloat(document.getElementById('filter-age-max')?.value) || null;
+      const thisYear = new Date().getFullYear();
+
       return houses.filter(h => {
         const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.user_excluded;
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
@@ -1479,12 +1494,41 @@ export function renderMapHtml({ initialData, config = {} }) {
         if (aMin != null && h.area_sqm != null && h.area_sqm < aMin) return false;
         if (aMax != null && h.area_sqm != null && h.area_sqm > aMax) return false;
 
+        if (uMin != null && h.unit_price != null && h.unit_price < uMin) return false;
+        if (uMax != null && h.unit_price != null && h.unit_price > uMax) return false;
+
+        if (ageMax != null && h.built_year != null && (thisYear - h.built_year) > ageMax) return false;
+
+        if (floorSel.size) {
+          const seg = (String(h.floor ?? '').match(/(低|中|高)楼层/) || [])[1];
+          if (seg && !floorSel.has(seg)) return false;
+        }
+
         return true;
       });
     }
 
+    function setSortMode(key) { sortKey = key; applyFilters(); }
+    function toggleFloorChip(seg) {
+      if (floorSel.has(seg)) floorSel.delete(seg); else floorSel.add(seg);
+      document.querySelectorAll('#floor-chips .chip').forEach(ch => {
+        ch.classList.toggle('active', floorSel.has(ch.textContent.replace('楼层', '')));
+      });
+      applyFilters();
+    }
+
     function applyFilters() {
       const filtered = getFilteredHouses();
+      const dir = { score: -1, unit: 1, total: 1, area: -1, year: -1, location: -1 }[sortKey] ?? -1;
+      const val = h => ({ score: h.score_global, unit: h.unit_price, total: h.total_price_wan, area: h.area_sqm, year: h.built_year, location: h.score_location }[sortKey]);
+      filtered.sort((a, b) => {
+        const va = val(a), vb = val(b);
+        const na = Number.isFinite(va), nb = Number.isFinite(vb);
+        if (na && nb) return dir * (vb - va || String(a.no).localeCompare(String(b.no)));
+        if (na) return -1;
+        if (nb) return 1;
+        return String(a.no).localeCompare(String(b.no));
+      });
       document.getElementById('count-visible').textContent = filtered.length;
       renderHouseList(filtered);
       refreshMapMarkers(filtered);
@@ -1611,48 +1655,30 @@ export function renderMapHtml({ initialData, config = {} }) {
         }
         selectedCompareNos.push(no);
       }
-      updateCompareTray();
+      updateCompareFab();
       renderHouseList();
     }
 
     function clearCompareSelection() {
       selectedCompareNos = [];
-      updateCompareTray();
+      updateCompareFab();
       renderHouseList();
     }
 
-    function updateCompareTray() {
-      const tray = document.getElementById('compare-tray');
-      const countEl = document.getElementById('compare-count');
-      const chipsEl = document.getElementById('compare-chips');
-
-      countEl.textContent = selectedCompareNos.length;
-      chipsEl.innerHTML = '';
-
-      if (selectedCompareNos.length === 0) {
-        tray.classList.remove('show');
-        return;
-      }
-
-      tray.classList.add('show');
-      selectedCompareNos.forEach(no => {
-        const item = houses.find(h => h.report_no === no);
-        if (!item) return;
-        const chip = document.createElement('div');
-        chip.className = 'compare-chip';
-        chip.innerHTML = \`
-          <span>#\${item.report_no} \${item.community}</span>
-          <span class="compare-chip-del" onclick="toggleCompareItem('\${item.report_no}')">✕</span>
-        \`;
-        chipsEl.appendChild(chip);
-      });
+    function updateCompareFab() {
+      const fab = document.getElementById('compare-fab');
+      if (!fab) return;
+      const n = selectedCompareNos.length;
+      fab.style.display = n > 0 ? 'flex' : 'none';
+      document.getElementById('compare-fab-count').textContent = n;
     }
+
 
     function openCompareModal() {
       if (selectedCompareNos.length === 0) {
         const filtered = getFilteredHouses();
         selectedCompareNos = filtered.slice(0, 2).map(h => h.report_no);
-        updateCompareTray();
+        updateCompareFab();
         renderHouseList();
       }
 
@@ -1903,18 +1929,8 @@ export function renderMapHtml({ initialData, config = {} }) {
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const cls = isRejected ? 'low' : isRec ? 'high' : 'mid';
 
-        let label = '';
         const suspectMark = h.authenticity === 'suspect' ? '⚠ ' : '';
-        if (markerViewMode === 'score') {
-          label = (isRec ? '★ ' : '') + suspectMark + (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
-        } else if (markerViewMode === 'trend') {
-          const flex = h.discount_space === 'wide' ? '弹性5%+' : '弹性3-5%';
-          label = (h.community || h.report_no) + ' · ' + (h.market_trend === 'bottoming' ? '筑底' : '阴跌') + ' · ' + flex;
-        } else if (markerViewMode === 'policy') {
-          label = (h.community || h.report_no) + ' · 税费≈' + (h.policy_tax_wan ? h.policy_tax_wan + '万' : '待查');
-        } else if (markerViewMode === 'planning') {
-          label = (h.community || h.report_no) + ' · ' + (h.urban_planning === 'positive' ? '轨交在建' : '现状平稳');
-        }
+        const label = (isRec ? '★ ' : '') + suspectMark + (h.score_global != null ? h.score_global : '--') + ' ' + (h.community || h.report_no);
 
         const iconHtml = \`<div class="map-marker \${cls}">\${label}</div>\`;
         const icon = L.divIcon({
