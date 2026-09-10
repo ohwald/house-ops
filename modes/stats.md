@@ -2,7 +2,7 @@
 
 触发：`/house-ops stats` 或"统计一下/我的找房数据"。数据源：`reports/*.md` 的 Machine Summary（schema SoT = evaluate.md；`scripts/stats.mjs` 是同一契约的无 AI 实现，优先跑脚本再人工补充解读）。
 
-想要可视化视图时，让用户直接跑 `npm run dashboard`（Ink TUI：关注清单表格、Global 分布、Top 房源；共享同一解析契约 `scripts/lib/data.mjs`），统计结论仍以本模式的分析输出为准。
+想要可视化视图时，让用户直接跑 `npm run dashboard`（Ink TUI：关注清单表格、综合评分分布、Top 房源；共享同一解析契约 `scripts/lib/data.mjs`），统计结论仍以本模式的分析输出为准。
 
 ## 输出
 

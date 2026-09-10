@@ -37,7 +37,7 @@ for (const r of rows) {
 
 console.log(`评估报告: ${rows.length} 份${voidRows.length ? `（另有 ${voidRows.length} 份已作废，不参与统计）` : ''}`);
 if (suspectCount) console.log(`⚠️  真实性存疑: ${suspectCount} 套（数据未实采核验，结论仅供参考）`);
-console.log(`Global 均分: ${avg}（最高 ${scores.length ? Math.max(...scores).toFixed(1) : '—'}，最低 ${scores.length ? Math.min(...scores).toFixed(1) : '—'}）`);
+console.log(`综合评分均分: ${avg}（最高 ${scores.length ? Math.max(...scores).toFixed(1) : '—'}，最低 ${scores.length ? Math.min(...scores).toFixed(1) : '—'}）`);
 console.log('结论分布:', JSON.stringify(byConclusion, null, 2));
 
 const district = {};
@@ -59,4 +59,4 @@ for (const [k, n] of sorted) console.log(`  ${k}: ${n} 套`);
 
 console.log('\nTop 3 房源:');
 [...rows].sort((a, b) => (b.score_global ?? 0) - (a.score_global ?? 0)).slice(0, 3)
-  .forEach(r => console.log(`  ${r.report_no ?? r.file} ${r.community ?? ''} — Global ${r.score_global}（${r.conclusion ?? ''}）`));
+  .forEach(r => console.log(`  ${r.report_no ?? r.file} ${r.community ?? ''} — 综合评分 ${r.score_global}（${r.conclusion ?? ''}）`));

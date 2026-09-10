@@ -732,11 +732,11 @@ export function renderMapHtml({ initialData, config = {} }) {
     </div>
 
     <div class="header-stats">
-      <div class="stat-pill active" id="pill-all" onclick="setDecisionFilter('all')">
+      <div class="stat-pill" id="pill-all" onclick="setDecisionFilter('all')">
         <span>全部</span>
         <strong id="stat-total">0</strong>
       </div>
-      <div class="stat-pill" id="pill-rec" onclick="setDecisionFilter('rec')">
+      <div class="stat-pill active" id="pill-rec" onclick="setDecisionFilter('rec')">
         <div class="stat-dot dot-green"></div>
         <span>第一梯队</span>
         <strong id="stat-rec" style="color:#34d399">0</strong>
@@ -801,9 +801,9 @@ export function renderMapHtml({ initialData, config = {} }) {
         <div class="switch-row" onclick="toggleExcludeRejected()">
           <div>
             <div style="font-weight:600;">隐藏高代价/硬伤房源</div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">过滤硬性DQ或严重溢价项</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">过滤有硬伤或明显虚高的房源</div>
           </div>
-          <div class="switch-box" id="switch-exclude-box">
+          <div class="switch-box active" id="switch-exclude-box">
             <div class="switch-dot"></div>
           </div>
         </div>
@@ -1027,7 +1027,7 @@ export function renderMapHtml({ initialData, config = {} }) {
           <input type="number" step="0.1" class="form-input" id="p-threshold-deep">
         </div>
         <div class="form-group">
-          <label class="form-label">弃购门槛分 (Give-up)</label>
+          <label class="form-label">排除线门槛分（低于即排除）</label>
           <input type="number" step="0.1" class="form-input" id="p-threshold-giveup">
         </div>
       </div>
@@ -1064,8 +1064,8 @@ export function renderMapHtml({ initialData, config = {} }) {
     let commuteCircle = null;
 
     let markerViewMode = 'score';
-    let filterDecision = 'all';
-    let excludeRejected = false;
+    let filterDecision = 'rec';  // 默认展示第一梯队（高分直接可见）
+    let excludeRejected = true; // 默认隐藏已排除房源（用户要看的是高分与备选）
     let showCommuteRange = true;
     let showPlanningLayer = true;
     let scoreFloor = 0;
@@ -1399,7 +1399,7 @@ export function renderMapHtml({ initialData, config = {} }) {
     function updateStatsHeader() {
       let rec = 0, cond = 0, pass = 0;
       houses.forEach(h => {
-        if (h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass') {
+        if (h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.user_excluded) {
           pass++;
         } else if ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'strong_buy' || h.conclusion === 'worth_viewing') {
           rec++;
@@ -1461,7 +1461,7 @@ export function renderMapHtml({ initialData, config = {} }) {
       const aMax = parseFloat(document.getElementById('filter-area-max').value) || null;
 
       return houses.filter(h => {
-        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass';
+        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.user_excluded;
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const isCond = !isRejected && !isRec;
 
@@ -1503,7 +1503,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         item.className = 'house-item';
         item.onclick = () => selectHouse(h);
 
-        const isRejected = h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass';
+        const isRejected = h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass' || h.user_excluded;
         const scoreClass = isRejected ? 'score-low' : (h.score_global >= 4.0) ? 'score-high' : 'score-mid';
         const isSelectedCompare = selectedCompareNos.includes(h.report_no);
 
@@ -1558,21 +1558,22 @@ export function renderMapHtml({ initialData, config = {} }) {
 
       const badge = document.getElementById('m-badge');
       badge.textContent = h.score_global != null ? h.score_global : '无分';
-      badge.className = 'score-badge ' + ((h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass') ? 'score-low'
+      badge.className = 'score-badge ' + ((h.hard_dq_hit || h.score_global < 3.5 || h.conclusion === 'pass' || h.user_excluded) ? 'score-low'
         : (h.score_global >= 4.0) ? 'score-high' : 'score-mid');
 
       // ── 三句话观点：事实 → 代价 → 结论（数字优先；观点以 watchlist 备注为 SoT） ──
       const days = h.listed_at ? Math.max(0, Math.round((Date.now() - new Date(h.listed_at)) / 86400000)) : null;
       const factBits = [];
-      if (h.score_global != null) factBits.push('Global ' + h.score_global);
+      if (h.score_global != null) factBits.push('综合评分 ' + h.score_global);
       if (h.total_price_wan != null) factBits.push('挂牌 ' + h.total_price_wan + ' 万');
       if (h.unit_price != null) factBits.push(h.unit_price.toLocaleString() + ' 元/㎡');
       if (days != null) factBits.push('已挂牌 ' + days + ' 天');
       if (h.viewings_30d != null) factBits.push('30 天带看 ' + h.viewings_30d + ' 次');
       document.getElementById('s-fact').textContent = factBits.join(' · ') || '--';
       const costBits = [];
-      if (h.hard_dq_hit) costBits.push('硬性 DQ 命中（封顶 2.5）');
-      if (h.risk_tier && h.risk_tier !== 'low') costBits.push('风险 ' + h.risk_tier);
+      if (h.hard_dq_hit) costBits.push('命中一票否决项（综合评分封顶 2.5）');
+      const riskCn = { low: '低', caution: '注意', high: '高' }[h.risk_tier];
+      if (riskCn) costBits.push('风险 ' + riskCn);
       const uv = (h.unverified_items && h.unverified_items.length) ? h.unverified_items.length : 0;
       if (uv) costBits.push(uv + ' 项待核实');
       if (h.authenticity === 'suspect') costBits.push('真实性存疑（数据未实采核验）');
@@ -1898,7 +1899,7 @@ export function renderMapHtml({ initialData, config = {} }) {
         }
         h._latlng = [lat, lng];
 
-        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass';
+        const isRejected = h.hard_dq_hit || (h.score_global != null && h.score_global < 3.5) || h.conclusion === 'pass' || h.user_excluded;
         const isRec = !isRejected && ((h.score_global != null && h.score_global >= 4.0) || h.conclusion === 'worth_viewing' || h.conclusion === 'strong_buy');
         const cls = isRejected ? 'low' : isRec ? 'high' : 'mid';
 

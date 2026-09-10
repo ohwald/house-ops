@@ -1,6 +1,6 @@
 # Mode: negotiate — 沟通谈判建议
 
-触发：`/house-ops negotiate [编号|小区名|URL]`。**前置条件：Global ≥ 4.0**（同 deep-dive 门槛规则）。
+触发：`/house-ops negotiate [编号|小区名|URL]`。**前置条件：综合评分 ≥ 4.0**（同 deep-dive 门槛规则）。
 
 前置阅读：`_shared.md`、`_profile.md`（沟通偏好）、该房源的评估/deep-dive 报告。
 

@@ -272,7 +272,7 @@ const baseRec = (over = {}) => ({
   has('流动性：脱敏成交不当作 0 套', !/成交 0 套/.test(liq));
   const price = r.findings['价格'].map((x) => x.level + ':' + x.title).join(',');
   has('价格：低于均价 11.9% 判 good', price.includes('good:挂牌低于小区均价 11.9%'));
-  eq('观点提炼：事实句', r.viewpoint.fact, '示范海棠湾(三期) · 挂牌 480 万 · 47,525 元/㎡ · 101㎡ 3室1厅 · 已挂牌 100 天 · 30 天带看 193 次');
+  has('观点提炼：事实句（动态天数+数字齐备）', r.viewpoint.fact.startsWith('示范海棠湾(三期) · 挂牌 480 万 · 47,525 元/㎡ · 101㎡ 3室1厅 · 已挂牌') && /带看 193 次/.test(r.viewpoint.fact));
   has('观点提炼：代价句含伪多房', /伪多房/.test(r.viewpoint.cost));
   has('观点提炼：结论句含备注观点', r.viewpoint.verdict.length > 10);
 }

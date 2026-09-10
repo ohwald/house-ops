@@ -81,11 +81,17 @@ async function loadFullData() {
       const key = [r.city, r.district, r.community].filter(Boolean).join('·');
       const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
       const wScore = w ? num(w.score) : null;
+      const note = w ? w.note : '';
+      // 用户排除判定：备注含「排除/弃购」（人做的决定，非数据问题）
+      const userExcluded = /排除|弃购/.test(note);
+      const riskCn = { low: '低', caution: '注意', high: '高' };
       return {
         ...r,
         coords,
         score_global: (w && wScore != null) ? wScore : (r.score_global ?? null),
-        watchlist_note: w ? w.note : '',
+        risk_tier: w ? (riskCn[w.risk] ?? (r.risk_tier ?? w.risk)) : (r.risk_tier ?? ''),
+        watchlist_note: note,
+        user_excluded: userExcluded,
         authenticity: w ? (w.authenticity || 'verified') : (r.provenance === 'suspect' ? 'suspect' : 'verified'),
       };
     });

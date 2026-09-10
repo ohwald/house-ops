@@ -149,7 +149,7 @@ function WatchTable({ rows, selectedIndex }) {
   return h(Box, { flexDirection: 'column' }, [header, ...body]);
 }
 
-// ---------- Global 分数直方图 ----------
+// ---------- 综合评分直方图 ----------
 function Histogram({ scores }) {
   const bins = [
     ['<3.0', s => s < 3],
@@ -241,7 +241,7 @@ function MainView({ data, selectedIndex, flashMessage, sortMode = 'score' }) {
         : dim('  （还没有候选房源）')),
 
     h(Box, { key: 'hist', flexDirection: 'column', marginBottom: 1 },
-      sectionTitle('综合评分分布 (Global)'),
+      sectionTitle('综合评分分布'),
       scores.length ? h(Histogram, { scores }) : dim('  （还没有评分）')),
 
     h(Box, { key: 'top', flexDirection: 'column', marginBottom: 1 },
