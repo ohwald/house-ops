@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { exec, spawn } from 'node:child_process';
 import React, { useState, useEffect } from 'react';
 import { render, Text, Box, Static, useInput, useApp } from 'ink';
-import { collectReports, parseWatchlist, readReportDetail } from './lib/data.mjs';
+import { collectReports, parseWatchlist, readReportDetail, num } from './lib/data.mjs';
+import { conclusionLabel, riskLabel } from './lib/decision.mjs';
 
 const h = React.createElement;
 const ROOT = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,38 +73,36 @@ const trunc = (s, w) => {
   return out + '…';
 };
 
+// ---------- 排序比较器（loadData 默认序与 p 键切换共用，唯一实现） ----------
+const WATCHLIST_COMPARATORS = {
+  score: (a, b) => {
+    const sa = num(a.score), sb = num(b.score);
+    if (sa != null && sb != null) return sb !== sa ? sb - sa : String(a.no).localeCompare(String(b.no));
+    return sa != null ? -1 : sb != null ? 1 : String(a.no).localeCompare(String(b.no));
+  },
+  price: (a, b) => {
+    const pa = num(a.price), pb = num(b.price);
+    if (pa != null && pb != null) return pa !== pb ? pa - pb : String(a.no).localeCompare(String(b.no));
+    return pa != null ? -1 : pb != null ? 1 : String(a.no).localeCompare(String(b.no));
+  },
+  no: (a, b) => String(a.no).localeCompare(String(b.no)),
+};
+
 // ---------- 数据加载 ----------
 async function loadData() {
   const [reports, watchlist] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
   ]);
-  const reportMap = new Map();
-  for (const r of reports) {
-    if (r.report_no) reportMap.set(String(r.report_no).padStart(3, '0'), r);
-  }
-
-  // 默认按综合评分降序排序（高分在先）；同分按编号升序；无评分靠后
-  const sortedWatchlist = [...(watchlist ?? [])].sort((a, b) => {
-    const sa = num(a.score);
-    const sb = num(b.score);
-    if (sa != null && sb != null) {
-      if (sb !== sa) return sb - sa;
-      return String(a.no).localeCompare(String(b.no));
-    }
-    if (sa != null) return -1;
-    if (sb != null) return 1;
-    return String(a.no).localeCompare(String(b.no));
-  });
-
-  return { reports, watchlist: sortedWatchlist, reportMap, loadedAt: new Date() };
+  // 默认按综合评分降序（高分在先）；TUI 内 p 键切换经 displayWatchlist 用同一张比较器表
+  const sortedWatchlist = [...(watchlist ?? [])].sort(WATCHLIST_COMPARATORS.score);
+  return { reports, watchlist: sortedWatchlist, loadedAt: new Date() };
 }
 
 // ---------- 样式与辅助 ----------
-const num = s => { const v = parseFloat(s); return Number.isFinite(v) ? v : null; };
+// 真实性/结论/风险的语义来自 lib/data.mjs 与 lib/decision.mjs 唯一实现，这里只做 TUI 着色
 const scoreColor = s => (s == null ? 'gray' : s >= 4 ? 'green' : s >= 3.5 ? 'yellow' : 'red');
-const riskColor = r => ({ low: 'green', caution: 'yellow', 注意: 'yellow', high: 'red', 高风险: 'red' }[r] ?? 'gray');
-const CONCLUSION_LABEL = { strong_buy: '强推', worth_viewing: '值得看', conditional: '看情况', pass: '放弃' };
+const riskColor = r => ({ 低: 'green', 注意: 'yellow', 高: 'red' }[riskLabel(r)] ?? 'gray');
 
 const dim = (s, key) => h(Text, { key, color: 'gray' }, s);
 function sectionTitle(title) {
@@ -223,7 +222,8 @@ function MainView({ data, selectedIndex, flashMessage, sortMode = 'score' }) {
   const date = loadedAt instanceof Date
     ? `${loadedAt.getFullYear()}-${String(loadedAt.getMonth() + 1).padStart(2, '0')}-${String(loadedAt.getDate()).padStart(2, '0')}`
     : new Date().toISOString().slice(0, 10);
-  const validReports = reports.filter(r => r.provenance !== 'void');
+  // ⛔作废已在 data 层过滤（ADR-0002：collectReports/parseWatchlist 默认排除 void）
+  const validReports = reports;
   const scores = validReports.map(r => num(r.score_global)).filter(v => v != null);
   const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '—';
   const top = [...validReports].sort((a, b) => (num(b.score_global) ?? 0) - (num(a.score_global) ?? 0)).slice(0, 3);
@@ -232,7 +232,7 @@ function MainView({ data, selectedIndex, flashMessage, sortMode = 'score' }) {
   return h(Box, { flexDirection: 'column' }, [
     h(Box, { key: 'head', marginBottom: 1 },
       h(Text, { bold: true, color: 'magenta' }, 'house-ops 购房操作台'),
-      dim(`  ${date}  ·  评估报告 ${reports.filter(r => r.provenance !== 'void').length} 份 · 候选 ${watchlist.length} 套 · 均分 ${avg}`, 'sub')),
+      dim(`  ${date}  ·  评估报告 ${reports.length} 份 · 候选 ${watchlist.length} 套 · 均分 ${avg}`, 'sub')),
 
     h(Box, { key: 'wl', flexDirection: 'column', marginBottom: 1 },
       sectionTitle(`关注清单 [${sortLabels[sortMode] || '综合评分'}] (上下移动)`),
@@ -252,7 +252,7 @@ function MainView({ data, selectedIndex, flashMessage, sortMode = 'score' }) {
               h(Text, { color: i === 0 ? 'yellow' : 'gray' }, `${i + 1}. `),
               h(Text, null, `${r.report_no ?? '???'} ${trunc(r.community, 18)}  `),
               h(Text, { color: scoreColor(num(r.score_global)) }, `评分 ${r.score_global ?? '—'}`),
-              dim(`  ${CONCLUSION_LABEL[r.conclusion] ?? r.conclusion ?? ''}`))))
+              dim(`  ${conclusionLabel(r.conclusion)}`))))
         : dim('  （还没有评估报告 — 粘贴一条房源链接开始）')),
 
     // 即时反馈 Toast
@@ -303,25 +303,8 @@ function Interactive({ onReady }) {
 
   const displayWatchlist = React.useMemo(() => {
     if (!data?.watchlist) return [];
-    // 真实性过滤（ADR-0002）：⛔作废/虚构行默认隐藏防止干扰；⚠存疑行保留但标记
-    const list = [...data.watchlist].filter(r => r.authenticity !== 'void');
-    if (sortMode === 'score') {
-      return list.sort((a, b) => {
-        const sa = num(a.score);
-        const sb = num(b.score);
-        if (sa != null && sb != null) return sb !== sa ? sb - sa : String(a.no).localeCompare(String(b.no));
-        return sa != null ? -1 : sb != null ? 1 : String(a.no).localeCompare(String(b.no));
-      });
-    }
-    if (sortMode === 'price') {
-      return list.sort((a, b) => {
-        const pa = num(a.price);
-        const pb = num(b.price);
-        if (pa != null && pb != null) return pa !== pb ? pa - pb : String(a.no).localeCompare(String(b.no));
-        return pa != null ? -1 : pb != null ? 1 : String(a.no).localeCompare(String(b.no));
-      });
-    }
-    return list.sort((a, b) => String(a.no).localeCompare(String(b.no)));
+    // ⛔作废行已在 parseWatchlist 下沉过滤（ADR-0002）；⚠存疑行保留但标记
+    return [...data.watchlist].sort(WATCHLIST_COMPARATORS[sortMode] ?? WATCHLIST_COMPARATORS.no);
   }, [data?.watchlist, sortMode]);
 
   useInput((input, key) => {
@@ -469,9 +452,9 @@ if (isTTY) {
   const instance = render(h(Interactive, { onReady: markReady }), { exitOnCtrlC: true });
   await instance.waitUntilExit();
 } else {
-  // 管道/CI: 单帧静态纯文本输出（与 TTY 同规则：⛔作废行不展示）
+  // 管道/CI: 单帧静态纯文本输出（⛔作废行已在 data 层过滤，与 TTY 同规则）
   const data = await loadData();
-  const frame = { ...data, watchlist: (data.watchlist ?? []).filter(r => r.authenticity !== 'void') };
+  const frame = { ...data, watchlist: data.watchlist ?? [] };
   const instance = render(
     h(Static, { items: ['dash'] }, item => h(Box, { key: item, flexDirection: 'column' }, h(MainView, {
       data: frame,

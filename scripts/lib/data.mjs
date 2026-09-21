@@ -6,6 +6,14 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+// ---------- 共享标量工具 ----------
+
+// 宽松数字解析：可解析（有限）返回数值，否则 null。统计/筛选/CLI 参数共用。
+export function num(s) {
+  const v = parseFloat(s);
+  return Number.isFinite(v) ? v : null;
+}
+
 // ---------- Machine Summary（评估报告） ----------
 
 export function parseMachineSummary(text) {
@@ -61,6 +69,15 @@ export function authenticityFromNote(note = '') {
   if (t.startsWith('⚠️')) return 'suspect';
   if (t.startsWith('✅')) return 'verified';
   return 'legacy';
+}
+
+// 真实性折叠唯一出口（ADR-0002）：watchlist 备注首标记是 SoT；无 watchlist 行时回落报告
+// Machine Summary 的 provenance；两者皆无 → legacy（按存疑对待，绝不静默升为 verified）。
+// 消费方（map/dashboard/页面）一律经此函数取真实性，不得自行折叠。
+export function effectiveProvenance(report, watchRow) {
+  if (watchRow) return watchRow.authenticity ?? 'legacy';
+  const p = report?.provenance;
+  return p === 'verified' || p === 'suspect' || p === 'void' ? p : 'legacy';
 }
 
 export async function parseWatchlist(watchlistPath, { includeVoid = false } = {}) {

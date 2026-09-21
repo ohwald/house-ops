@@ -11,9 +11,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
 
-import { collectReports, parseWatchlist } from './lib/data.mjs';
+import { collectReports, parseWatchlist, effectiveProvenance, num } from './lib/data.mjs';
 import { parseProfile, updateProfileFields } from './lib/profile.mjs';
 import { loadGeoCache, saveGeoCache } from './lib/geo.mjs';
+import { decide, isUserExcluded } from './lib/decision.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,34 +72,31 @@ async function loadFullData() {
   const parsedProfile = parseProfile(rawProfile);
 
   // 备注与地理坐标补充到报告列表中
-  // 真实性（ADR-0002）：⛔作废报告不上图；评分以 watchlist 当前口径为准（报告 Machine Summary 可能是重评前旧分）
-  const num = s => { const v = parseFloat(s); return Number.isFinite(v) ? v : null; };
+  // 真实性（ADR-0002）：⛔作废报告已在 data 层过滤不上图；真实性折叠唯一出口 effectiveProvenance
   const watchMap = new Map((watchlist || []).map(w => [w.no, w]));
   const mergedReports = reports
-    .filter(r => r.provenance !== 'void')
     .map(r => {
       const w = watchMap.get(r.report_no);
       const key = [r.city, r.district, r.community].filter(Boolean).join('·');
       const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
       const wScore = w ? num(w.score) : null;
       const note = w ? w.note : '';
-      // 用户排除判定：备注含「排除/弃购」（人做的决定，非数据问题）
-      const userExcluded = /排除|弃购/.test(note);
-      const riskCn = { low: '低', caution: '注意', high: '高' };
       return {
         ...r,
         coords,
         score_global: (w && wScore != null) ? wScore : (r.score_global ?? null),
-        risk_tier: w ? (riskCn[w.risk] ?? (r.risk_tier ?? w.risk)) : (r.risk_tier ?? ''),
+        risk_tier: r.risk_tier ?? (w?.risk ?? ''),
         watchlist_note: note,
-        user_excluded: userExcluded,
-        authenticity: w ? (w.authenticity || 'verified') : (r.provenance === 'suspect' ? 'suspect' : 'verified'),
+        user_excluded: isUserExcluded(note),
+        authenticity: effectiveProvenance(r, w),
       };
-    });
+    })
+    // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染
+    .map(h => ({ ...h, decision: decide(h) }));
 
   return {
     reports: mergedReports,
-    watchlist: (watchlist || []).filter(w => w.authenticity !== 'void'),  // ⛔作废行是历史记录，不上图
+    watchlist: watchlist || [],
     profile: parsedProfile,
     rawYaml: rawProfile,
     geoCache,
@@ -166,7 +164,20 @@ async function main() {
           if (payload.rawYaml && payload.rawYaml.trim()) {
             newYaml = payload.rawYaml;
           } else if (payload.patch) {
-            newYaml = updateProfileFields(currentYaml, payload.patch);
+            // profile 契约表驱动（lib/profile.mjs）：无匹配行/未知键显式报错，不再静默 no-op
+            const result = updateProfileFields(currentYaml, payload.patch);
+            if (result.missing.length || result.unknown.length) {
+              const bad = [...result.missing, ...result.unknown].join(', ');
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: `以下字段无法更新（配置缺行或不在契约中）: ${bad}` }));
+              return;
+            }
+            if (!result.applied.length) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: '补丁为空：没有任何可更新字段' }));
+              return;
+            }
+            newYaml = result.text;
           }
 
           if (newYaml) {

@@ -19,6 +19,9 @@
 ## 模块接缝（deepening 决策的命名沉淀）
 
 - **finalizeRecord**（`scrapers/_fields.mjs`）：扫描记录定稿唯一入口 = 归一化 + 定价交叉验证。旧"先 normalize 才能 crosscheck"的顺序约定已被此 interface 吸收；crosscheck 锚点方法论：单价口径优先、最高可靠度档内最近 ≤5 条中位数、单样本显式降置信度、`anchor.n_samples/range_pct` 随结论输出。
+- **决策分层（Decision Tier）**（`scripts/lib/decision.mjs`）：四档 pill（第一梯队/备选对照/高代价硬伤）、状态标签、地图标记档的唯一实现 = `decide()`；`conclusionLabel()` 是 conclusion 枚举的中文 SoT；`isUserExcluded()` 承载"备注 排除/弃购 = 用户一票否决"语义。真实性不改变分层，只在展示标签上合成（suspect/legacy → 待验真）。服务端（map.mjs merge）预计算 `decision` 字段下发，页面 JS 只渲染不判定。
+- **effectiveProvenance**（`scripts/lib/data.mjs`）：真实性折叠唯一出口——优先级 watchlist 备注首标记 > 报告 Machine Summary `provenance` > legacy（按存疑对待，绝不静默升 verified）。⛔void 在 data 层（`collectReports`/`parseWatchlist`）下沉过滤，消费方不得重复实现或自行折叠。
+- **PROFILE_FIELDS**（`scripts/lib/profile.mjs`）：画像字段契约唯一声明——parse、update 与地图页表单收集/回填（经 map.html 注入表驱动）三方同源；update 返回 `{text, applied, missing, unknown}`，缺行与契约外键显式报错而非静默 no-op。
 - **平台 adapter**（`scrapers/*.mjs`）：一平台一模块，`detect()` 只回答 URL 语法与清单，不写 DOM 选择器；`_` 前缀为共享实现。
 
 ## 明确不做（见 docs/adr/）

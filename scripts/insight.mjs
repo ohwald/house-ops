@@ -13,6 +13,7 @@
 //   commute --from 121.592,31.252 --to 121.2386,31.0542 [--peak 1.6]
 //          OSRM 免费实例车行时间 × 高峰系数（公共交通不可用，走浏览器高德）
 
+import { num } from './lib/data.mjs';
 const SUN_TAB = { '2027-01-20': '大寒日', '2026-12-21': '冬至日' };
 const D2R = Math.PI / 180;
 
@@ -35,7 +36,6 @@ function elevationAt(latDeg, dec, hour) {
   return Math.asin(Math.sin(latR) * Math.sin(dec * D2R) + Math.cos(latR) * Math.cos(dec * D2R) * Math.cos(w)) * 180 / Math.PI;
 }
 
-function num(v) { const x = parseFloat(v); return Number.isFinite(x) ? x : null; }
 
 // Overpass 多镜像轮询（主站限频时自动降级，全部失败才报错）
 const OVERPASS_MIRRORS = [
@@ -219,3 +219,4 @@ if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFile
   }
   main[cmd](argv);
 }
+
