@@ -2,7 +2,7 @@
   "name": "house-ops",
   "version": "0.3.0",
   "private": true,
-  "description": "AI 购房搜索·汇总·分析操作台 — 平台扫描/验真/评级/对比（提示词操作系统；脚本层零依赖，仅 dashboard 使用 ink/react）",
+  "description": "A house-hunting decision workspace that runs inside your AI CLI (Claude Code / ZCode / Cursor) — scan listings, verify every number, score against your needs. 在 AI CLI 里运行的购房搜索·汇总·分析操作台。",
   "type": "module",
   "scripts": {
     "doctor": "node scripts/doctor.mjs",

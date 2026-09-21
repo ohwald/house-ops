@@ -23,3 +23,9 @@ reports/*
 
 # ===== 依赖（dashboard 的 ink/react；脚本层本身零依赖）=====
 node_modules/
+
+# ===== 操作系统/编辑器杂物 =====
+.DS_Store
+Thumbs.db
+*.swp
+tmp/

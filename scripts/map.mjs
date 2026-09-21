@@ -7,7 +7,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
 
@@ -47,7 +47,7 @@ house-ops 地图决策中枢
 let outPath = DEFAULT_OUT_PATH;
 const outIdx = args.indexOf('--out');
 if (outIdx !== -1 && args[outIdx + 1]) {
-  outPath = join(process.cwd(), args[outIdx + 1]);
+  outPath = resolve(process.cwd(), args[outIdx + 1]);  // resolve：绝对路径按绝对语义处理
 }
 
 let servePort = 3000;

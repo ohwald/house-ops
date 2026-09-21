@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies (dashboard only; core scripts are zero-dependency)
+        run: npm ci
+
+      - name: Syntax check — every module must parse
+        run: find scripts scrapers -name '*.mjs' -print0 | xargs -0 -n1 node --check
+
+      - name: Environment self-check (doctor)
+        run: node scripts/doctor.mjs
+
+      - name: Golden tests (selftest)
+        run: node scripts/selftest.mjs
+
+      - name: Map page smoke test
+        run: |
+          node scripts/map.mjs --out /tmp/map.html
+          grep -q 'house-ops 房源地图' /tmp/map.html
+          grep -q 'const INITIAL_DATA' /tmp/map.html
+          echo 'Map page generated OK'
+
+  privacy-guard:
+    name: Privacy guard — no user data in tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if user-layer data is tracked
+        run: |
+          PATTERN='^(data/(scans|evidence|notes|policy)/|data/watchlist\.md$|data/geo-cache\.json$|data/map\.html$|data/[0-9]{3}-|^reports/[0-9]{3}-|^config/profile\.yml$|^modes/_profile\.md$|^modes/_custom\.md$|^modes/_brief\.md$|\.DS_Store$)'
+          if git ls-files | grep -E "$PATTERN"; then
+            echo '::error::User-layer files are tracked by git. Per the AGENTS.md Data Contract these must never be committed. Remove them with `git rm --cached <file>` and extend .gitignore.'
+            exit 1
+          fi
+          echo 'OK — no user-layer data tracked.'

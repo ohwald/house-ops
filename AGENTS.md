@@ -158,6 +158,7 @@
 - **输出语言**：默认中文（`config/profile.yml` 的 `language.output` 可改）。金额用"万元"表述，单价用"元/㎡"。
 - **路径**：所有读写以仓库根（含 `AGENTS.md` 与 `modes/` 的目录）为基准，不受当前工作目录影响。
 - **Machine Summary**：schema 的 SoT 是 `modes/evaluate.md`；`scripts/stats.mjs` 按 same schema 解析，改键名必须同步两处。
+- **提交信息（Git Commits）**：英文 Conventional Commits（`feat(map): ...` / `fix(core): ...` / `docs: ...` / `chore(repo): ...`），面向开源协作者；正文可中文补充细节。推送前确认 CI 通过，且用户层数据（`data/`、`reports/`、`config/profile.yml`、`modes/_*.md`）绝不入库（`.github/workflows/ci.yml` 有 privacy guard 强制）。
 
 ## Pipeline Integrity
 
