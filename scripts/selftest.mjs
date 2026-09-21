@@ -11,7 +11,10 @@ import {
   buildPriceHistory, historyKey, listingFingerprint, matchRecord, buildEntityHistory,
   verifyAuthenticity,
 } from '../scrapers/_fields.mjs';
-import { authenticityFromNote } from './lib/data.mjs';
+import { authenticityFromNote, effectiveProvenance } from './lib/data.mjs';
+import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
+import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
+import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
 import { buildEvidenceName, evidenceDirFor, evidenceEntry, EVIDENCE_TYPES } from './evidence.mjs';
@@ -180,6 +183,123 @@ eq('⚠️ → suspect', authenticityFromNote('⚠️ 实采疑点：价格未�
 eq('✅ → verified', authenticityFromNote('✅ 已实采验证'), 'verified');
 eq('无标记 → legacy', authenticityFromNote('已看房；值得约看'), 'legacy');
 eq('空备注 → legacy', authenticityFromNote(''), 'legacy');
+
+// ---------- 真实性折叠唯一出口（effectiveProvenance，ADR-0002） ----------
+
+eq('watchlist 行优先', effectiveProvenance({ provenance: 'verified' }, { authenticity: 'suspect' }), 'suspect');
+eq('watchRow legacy 不静默升档', effectiveProvenance({ provenance: 'verified' }, { authenticity: 'legacy' }), 'legacy');
+eq('无行回落报告 suspect', effectiveProvenance({ provenance: 'suspect' }, null), 'suspect');
+eq('无行无标记 → legacy（旧实现曾折叠为 verified）', effectiveProvenance({}, null), 'legacy');
+eq('无行报告 void 直通', effectiveProvenance({ provenance: 'void' }, null), 'void');
+
+// ---------- 决策分层唯一实现（decision.mjs：四档 pill / 状态标签 / 标记档） ----------
+
+eq('备注 排除 → user_excluded', isUserExcluded('⚠️ 排除：总价超预算上限'), true);
+eq('备注 弃购 → user_excluded', isUserExcluded('✅ 弃购：通勤不可接受'), true);
+eq('普通备注不排除', isUserExcluded('✅ 可约看；带看记录见 notes'), false);
+
+const listing = (over = {}) => ({
+  score_global: 3.9, hard_dq_hit: false, conclusion: 'conditional',
+  user_excluded: false, authenticity: 'verified', risk_tier: 'low', ...over,
+});
+const D = over => decide(listing(over));
+
+eq('硬伤一票否决压过高分 → pass 档', D({ hard_dq_hit: true, score_global: 4.6 }).tier, 'pass');
+eq('低于排除线 3.5 → pass 档', D({ score_global: 2.5 }).tier, 'pass');
+eq('conclusion=pass → pass 档', D({ conclusion: 'pass' }).tier, 'pass');
+eq('备注排除 → pass 档', D({ user_excluded: true }).tier, 'pass');
+eq('score≥4.0 → rec 档', D({ score_global: 4.0 }).tier, 'rec');
+eq('strong_recommend → rec 档', D({ conclusion: 'strong_recommend' }).tier, 'rec');
+eq('worth_viewing+3.9 → rec 档', D({ score_global: 3.9, conclusion: 'worth_viewing' }).tier, 'rec');
+eq('conditional 无分 → cond 档', D({ score_global: null }).tier, 'cond');
+eq('pass 档标记与标签', [D({ hard_dq_hit: true }).markerCls, D({ hard_dq_hit: true }).tag, D({ hard_dq_hit: true }).tagCls], ['low', '高代价/已排除', 'status-red']);
+eq('rec+verified → 可约看（绿）', [D({ score_global: 4.2 }).tag, D({ score_global: 4.2 }).tagCls], ['可约看', 'status-green']);
+eq('rec+suspect → 待验真（琥珀），分层不变', [D({ score_global: 4.2, authenticity: 'suspect' }).tier, D({ score_global: 4.2, authenticity: 'suspect' }).tag], ['rec', '待验真']);
+eq('cond+legacy → 待验真', D({ authenticity: 'legacy' }).tag, '待验真');
+eq('cond 标记类 mid', D().markerCls, 'mid');
+eq('risk 枚举映射', riskLabel('caution'), '注意');
+eq('risk 中文直通', riskLabel('注意'), '注意');
+eq('risk 未知 → null', riskLabel('—'), null);
+eq('conclusion 含 strong_recommend（dashboard 漂移回归）', conclusionLabel('strong_recommend'), '强烈推荐');
+eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
+
+// ---------- 地图页内部 seam（C3：页面脚本字符串可解析 + demo fixture 与 decide() 一致） ----------
+
+{
+  const { PAGE_SCRIPT } = await import('./lib/map-page.mjs');
+  const { DEMO_HOUSES } = await import('./lib/map-demo.mjs');
+  let pageParseOk = true;
+  try { new Function(PAGE_SCRIPT); } catch { pageParseOk = false; }
+  has('页面脚本（map-page.mjs 字符串）语法可解析', pageParseOk);
+  has('页面脚本不再内嵌决策语义', !/function decisionInfo|isRejected = /.test(PAGE_SCRIPT));
+  eq('DEMO 决策字段与 decide() 一致（防 fixture 漂移）',
+    DEMO_HOUSES.every(d => {
+      const want = decide(d);
+      return ['tier', 'markerCls', 'tag', 'tagCls', 'risk'].every(k => d.decision[k] === want[k]);
+    }), true);
+  const html = renderMapHtml({ initialData: { reports: [], watchlist: [], profile: null, rawYaml: '', geoCache: {} }, config: {} });
+  eq('PROFILE_FIELDS 表单 id 全部存在于页面骨架',
+    PROFILE_FIELDS.every(f => (Array.isArray(f.form) ? f.form : f.form ? [f.form] : []).every(id => html.includes(`id="${id}"`))), true);
+}
+
+// ---------- profile 契约（C4：键表驱动 parse/update 对称 + 往返 golden） ----------
+
+const profileYaml = `buyer:
+  city: 上海
+  work_location: 浦东新区人民广场  # 通勤锚点
+  commute_max_minutes: 90
+budget:
+  total_range_wan: [400, 600]  # 预算带注释
+  walk_away_wan: 650
+  payment: 组合贷
+  loan_type: 商贷
+preferences:
+  layout: 三居
+  size_range_sqm: [95, 130]
+  building_age_max: 15
+  elevator_required: true
+thresholds:
+  deep_dive_min: 4.0
+  give_up_below: 3.5
+`;
+{
+  const p = parseProfile(profileYaml);
+  eq('parse city', p.buyer.city, '上海');
+  eq('parse 标量剥离行尾注释', p.buyer.work_location, '浦东新区人民广场');
+  eq('parse numberOrNull', p.buyer.commute_max_minutes, 90);
+  eq('parse array2', p.budget.total_range_wan, [400, 600]);
+  eq('parse bool', p.preferences.elevator_required, true);
+  eq('parse 非布尔值 → null', parseProfile('preferences:\n  elevator_required: yes\n').preferences.elevator_required, null);
+  eq('parse 缺失阈值回默认', parseProfile('thresholds:\n  deep_dive_min: null\n').thresholds.deep_dive_min, 4.0);
+  eq('parse 空文本 → null', parseProfile(''), null);
+
+  const r = updateProfileFields(profileYaml, {
+    buyer: { work_location: '徐家汇', commute_max_minutes: null },
+    budget: { total_range_wan: [380, 560] },
+    preferences: { elevator_required: false },
+    thresholds: { give_up_below: 3.2 },
+  });
+  eq('update applied 全部命中', r.applied.length, 5);
+  eq('update 无缺失', r.missing, []);
+  has('update 保留行尾注释', /# 通勤锚点/.test(r.text) && /# 预算带注释/.test(r.text));
+  const p2 = parseProfile(r.text);
+  eq('往返 work_location', p2.buyer.work_location, '徐家汇');
+  eq('往返 commute 显式 null', p2.buyer.commute_max_minutes, null);
+  eq('往返 array2', p2.budget.total_range_wan, [380, 560]);
+  eq('往返 bool', p2.preferences.elevator_required, false);
+  eq('往返 give_up_below', p2.thresholds.give_up_below, 3.2);
+
+  eq('缺失行 → missing 显式报错（不再静默 no-op）',
+    updateProfileFields('buyer:\n', { buyer: { city: '上海' } }).missing, ['buyer.city']);
+  eq('契约外键 → unknown',
+    updateProfileFields(profileYaml, { buyer: { nope: 'x' } }).unknown, ['buyer.nope']);
+  eq('parse/update 键集合对称',
+    PROFILE_FIELDS.every(f => {
+      const patch = { [f.section]: { [f.key]: f.kind === 'array2' ? [1, 2] : f.kind === 'bool' ? true : 1 } };
+      const out = updateProfileFields('buyer:\n  city: x\n  work_location: x\n  commute_max_minutes: 60\nbudget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\npreferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\nthresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n', patch);
+      return out.applied.length === 1 && !out.missing.length;
+    }), true);
+}
 
 // ---------- 真实性验证（verifyAuthenticity：实战案例复刻为 golden 用例） ----------
 
