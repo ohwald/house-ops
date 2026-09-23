@@ -29,3 +29,7 @@ node_modules/
 Thumbs.db
 *.swp
 tmp/
+
+# ===== 过程产物：本地设计稿与流程校验文件（不属于仓库内容）=====
+designs/
+docs/runtime-flow.*
