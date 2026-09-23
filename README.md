@@ -79,7 +79,7 @@ Housing data is a hallucination minefield. house-ops turns "can this number be t
 | Anjuke / 5i5j / Fang.com (安居客/我爱我家/房天下) | ✅ | ❌ estimates only (auto-downgraded, never inflated) |
 | Others | generic fallback template | per generic checklist |
 
-> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data.
+> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms.
 
 ## Quick start
 
@@ -185,7 +185,7 @@ intake 建画像 → App 刷到候选 → triage 速筛 → scan 验真+采价
 | 安居客 / 我爱我家 / 房天下 | ✅ | ❌ 仅估算行情（自动降档，宁降档不虚标） |
 | 其他平台 | generic 兜底清单 | 按通用清单采集 |
 
-> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发数据。
+> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。
 
 ## 快速开始
 
