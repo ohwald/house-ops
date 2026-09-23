@@ -253,6 +253,7 @@ export const PAGE_CSS = `    /* ════════════════
       font-size: 0.85rem;
     }
     .switch-row { border-bottom: none; }
+    .switch-row.disabled { opacity: 0.45; pointer-events: none; }
     .switch-row .switch-label { font-size: 0.8rem; color: var(--text-muted); }
     .switch-row .switch-label b { color: var(--text-main); font-weight: 500; }
 

@@ -120,7 +120,7 @@ export function renderMapHtml({ initialData, config = {} }) {
 
           <!-- 专业图层开关 -->
           <div class="switch-row" onclick="toggleIsochrone()">
-            <div class="switch-label">通勤圈（等时线 60/90min）</div>
+            <div class="switch-label" id="commute-switch-label">通勤圈（等时线 60/90min）</div>
             <div class="switch-box active" id="switch-commute-box">
               <div class="switch-dot"></div>
             </div>
@@ -408,7 +408,7 @@ export function renderMapHtml({ initialData, config = {} }) {
 
       <div class="form-group">
         <label class="form-label">工作地点 / 通勤锚点</label>
-        <input type="text" class="form-input" id="p-work-location" placeholder="例如：浦东新区人民广场">
+        <input type="text" class="form-input" id="p-work-location" placeholder="例如：徐家汇 / 人民广场">
         <div class="form-help">地图将以该地址为基准绘制星标与通勤圈</div>
       </div>
 

@@ -97,6 +97,12 @@ async function loadFullData() {
   return {
     reports: mergedReports,
     watchlist: watchlist || [],
+    // 工作锚点由画像驱动（buyer.work_location_coords = [经度, 纬度]，intake 采集或地图页写入）；
+    // 未设置时地图不绘制锚点与通勤圈，不内置任何默认位置
+    workAnchor: {
+      coords: (parsedProfile && parsedProfile.buyer && parsedProfile.buyer.work_location_coords) || null,
+      label: (parsedProfile && parsedProfile.buyer && parsedProfile.buyer.work_location) || '',
+    },
     profile: parsedProfile,
     rawYaml: rawProfile,
     geoCache,

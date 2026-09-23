@@ -5,7 +5,8 @@ buyer:
   self_description: ""        # 家庭结构一句话，如：三口之家，女儿 5 岁，奶奶常来小住
   city: ""                    # 目标城市，如：杭州
   target_districts: []        # 目标区/板块，可空，如：[未来科技城, 崇贤]
-  work_location: ""           # 主通勤锚点，如：城西银泰城
+  work_location: ""
+  work_location_coords: null   # [经度, 纬度]；intake 采集时用户提供或本地服务中写入，未设置时地图不绘制通勤圈           # 主通勤锚点，如：城西银泰城
   commute_max_minutes: null   # 主通勤单程上限（分钟）
   commute_by_metro: null      # 依赖地铁？true/false/null
 

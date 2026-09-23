@@ -28,7 +28,7 @@ export const DEMO_HOUSES = [
         verified_fact: "已交叉验证：实测步行至21号线在建站约700m，非现成上盖；对口小学办学仅3年并非名校；但满五唯一与筑底折价属实",
         tradeoff_summary: "【优势】自住品质与户型极佳，筑底期议价空间健康；【代价】单价贴近预算上限，需承担2年轨交施工期噪音。",
         decision: { tier: "rec", markerCls: "high", tag: "可约看", tagCls: "status-green", risk: "低" },
-        coords: [121.6112, 31.2586]
+        coords: [121.4780, 31.2450]
       },
       {
         report_no: "002",
@@ -57,7 +57,7 @@ export const DEMO_HOUSES = [
         verified_fact: "已交叉验证：二楼独立排水未改造有返水隐患，且近3个月同户型成交均价460万，480万并无明显倒挂，非真实笋盘",
         tradeoff_summary: "【优势】总价更低且房东急售折价弹性大，低门槛上车；【代价】税费较高且学位受限，抗跌性稍弱。",
         decision: { tier: "cond", markerCls: "mid", tag: "备选对照", tagCls: "status-blue", risk: "注意" },
-        coords: [121.5980, 31.2650]
+        coords: [121.4650, 31.2520]
       },
       {
         report_no: "003",
@@ -86,7 +86,7 @@ export const DEMO_HOUSES = [
         verified_fact: "已交叉验证：赠送部位属违建私封北天井，有拆除风险；西侧法定控规为垃圾中转站而非绿地，营销虚假承诺",
         tradeoff_summary: "【优势】绝对总价最低(420万)；【代价】命中硬性DQ（噪音超标+回迁混居），未来转手与居住体验风险过大。",
         decision: { tier: "pass", markerCls: "low", tag: "高代价/已排除", tagCls: "status-red", risk: "高" },
-        coords: [121.6030, 31.2950]
+        coords: [121.4860, 31.2680]
       },
       {
         report_no: "004",
@@ -115,6 +115,6 @@ export const DEMO_HOUSES = [
         verified_fact: "已交叉验证：抗跌性与国际圈层属实，但总价超出用户预算上限180万，税费极高，属画像硬性不符",
         tradeoff_summary: "【优势】圈层与自住品质天花板；【代价】总价超出预算180万触发硬性DQ，仅作为品质标杆方案对照。",
         decision: { tier: "pass", markerCls: "low", tag: "高代价/已排除", tagCls: "status-red", risk: "低" },
-        coords: [121.5850, 31.2420]
+        coords: [121.4580, 31.2320]
       }
     ];;

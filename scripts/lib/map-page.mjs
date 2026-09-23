@@ -94,7 +94,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     // 初始化 Leaflet 地图
     function initLeafletMap() {
       leafletMap = L.map('map-root', {
-        center: [31.248, 121.585],
+        center: [31.2304, 121.4737],  // 默认视野：上海市中心（锚点由画像决定，fitBounds 会覆盖）
         zoom: 12,
         minZoom: 3,
         maxZoom: 19,
@@ -200,6 +200,8 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
       applyFilters();
       refreshMapMarkers();
       updateCompareFab();
+      setupWorkAnchor();
+      setupUrbanPlanningOverlays();
     }
 
     function initProfileForm() {
@@ -728,15 +730,43 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     }
 
     // 设置工作地锚点与通勤圈（Screen 01：双等时圈 + 圈缘标签）
+    // 工作锚点由画像驱动：buyer.work_location_coords = [经度, 纬度]（intake 采集时由用户提供，
+    // 或在本地服务模式下写入画像），代码不内置任何真实位置。演示模式使用中性的虚构演示锚点；
+    // 未设置锚点时不绘制锚点与通勤圈，并在图层开关上给出引导。
+    function workAnchorInfo() {
+      if (isUsingDemo) return { coords: [31.2304, 121.4737], label: '公司 · 人民广场（演示）' };
+      const a = INITIAL_DATA.workAnchor;
+      if (a && a.coords && a.coords.length >= 2) {
+        const lng = Number(a.coords[0]), lat = Number(a.coords[1]);
+        if (!isNaN(lng) && !isNaN(lat)) return { coords: [lat, lng], label: '公司 · ' + (a.label || '工作地') };
+      }
+      return null;
+    }
+
+    function setCommuteSwitchAvail(available) {
+      const box = document.getElementById('switch-commute-box');
+      if (box) box.parentElement.classList.toggle('disabled', !available);
+      const lb = document.getElementById('commute-switch-label');
+      if (lb) lb.textContent = available ? '通勤圈（等时线 60/90min）' : '通勤圈（先在画像中设置工作地）';
+    }
+
     function setupWorkAnchor() {
       if (!leafletMap) return;
-      const workLat = 31.2610, workLng = 121.6020; // 浦东新区金桥人民广场
 
-      if (workMarker) leafletMap.removeLayer(workMarker);
-      if (commuteCircle) leafletMap.removeLayer(commuteCircle);
+      if (workMarker) { leafletMap.removeLayer(workMarker); workMarker = null; }
+      if (commuteCircle) { leafletMap.removeLayer(commuteCircle); commuteCircle = null; }
+
+      const a = workAnchorInfo();
+      if (!a) {
+        showCommuteRange = false;
+        setCommuteSwitchAvail(false);
+        return;
+      }
+      setCommuteSwitchAvail(true);
+      const [workLat, workLng] = a.coords;
 
       const briefcase = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>';
-      const html = '<div class="marker-work"><span class="work-dot">' + briefcase + '</span>公司 · 人民广场</div>';
+      const html = '<div class="marker-work"><span class="work-dot">' + briefcase + '</span>' + a.label + '</div>';
       const icon = L.divIcon({ html, className: 'leaflet-div-icon', iconSize: [150, 26], iconAnchor: [75, 13] });
       workMarker = L.marker([workLat, workLng], { icon, zIndexOffset: 2000 }).addTo(leafletMap);
 
@@ -756,17 +786,24 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
       if (showCommuteRange) commuteCircle.addTo(leafletMap);
     }
 
-    // 设置城市空间规划图层（Screen 01：在建轨交走向 + 站点圆点 + 产业核）
+    // 设置城市空间规划图层（仅演示模式：示意性线网与产业核）。
+    // 真实用户的规划信息应来自 scan/evaluate 的实采与政务公示，不做任何内置。
     function setupUrbanPlanningOverlays() {
       if (!planningLayerGroup) return;
       planningLayerGroup.clearLayers();
+      if (!isUsingDemo) {
+        if (showPlanningLayer && leafletMap && planningLayerGroup._map) {
+          // 保留空图层组的挂载状态即可，无内容可画
+        }
+        return;
+      }
 
       // 在建21号线走向示意（实线 + 站点圆点）
       const metroPath = [
-        [31.2400, 121.6180],
-        [31.2580, 121.6110],
-        [31.2750, 121.6050],
-        [31.2920, 121.5950]
+        [31.2100, 121.4780],
+        [31.2280, 121.4730],
+        [31.2450, 121.4670],
+        [31.2620, 121.4590]
       ];
       const poly = L.polyline(metroPath, {
         color: '#BF5AF2',
@@ -792,10 +829,10 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         iconSize: [150, 22],
         iconAnchor: [75, 11]
       });
-      planningLayerGroup.addLayer(L.marker([31.2980, 121.6120], { icon: chipIcon('轨交21号线（在建 · 2027）'), zIndexOffset: 1500 }));
+      planningLayerGroup.addLayer(L.marker([31.2520, 121.4860], { icon: chipIcon('规划轨交（示意）'), zIndexOffset: 1500 }));
 
       // 产业极核高亮
-      const indCircle = L.circle([31.2520, 121.6000], {
+      const indCircle = L.circle([31.2140, 121.4680], {
         radius: 2000,
         color: '#BF5AF2',
         weight: 1,
@@ -804,7 +841,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         fillOpacity: 0.07,
       });
       planningLayerGroup.addLayer(indCircle);
-      planningLayerGroup.addLayer(L.marker([31.2435, 121.5920], { icon: chipIcon('产业核 · 金桥'), zIndexOffset: 1400 }));
+      planningLayerGroup.addLayer(L.marker([31.2185, 121.4700], { icon: chipIcon('产业核（示意）'), zIndexOffset: 1400 }));
 
       if (showPlanningLayer && leafletMap) {
         planningLayerGroup.addTo(leafletMap);

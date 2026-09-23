@@ -246,7 +246,8 @@ eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
 
 const profileYaml = `buyer:
   city: 上海
-  work_location: 浦东新区人民广场  # 通勤锚点
+  work_location: 黄浦区人民广场  # 通勤锚点
+  work_location_coords: [121.4737, 31.2304]
   commute_max_minutes: 90
 budget:
   total_range_wan: [400, 600]  # 预算带注释
@@ -265,8 +266,9 @@ thresholds:
 {
   const p = parseProfile(profileYaml);
   eq('parse city', p.buyer.city, '上海');
-  eq('parse 标量剥离行尾注释', p.buyer.work_location, '浦东新区人民广场');
+  eq('parse 标量剥离行尾注释', p.buyer.work_location, '黄浦区人民广场');
   eq('parse numberOrNull', p.buyer.commute_max_minutes, 90);
+eq('parse array2 锚点坐标', p.buyer.work_location_coords, [121.4737, 31.2304]);
   eq('parse array2', p.budget.total_range_wan, [400, 600]);
   eq('parse bool', p.preferences.elevator_required, true);
   eq('parse 非布尔值 → null', parseProfile('preferences:\n  elevator_required: yes\n').preferences.elevator_required, null);
@@ -285,6 +287,7 @@ thresholds:
   const p2 = parseProfile(r.text);
   eq('往返 work_location', p2.buyer.work_location, '徐家汇');
   eq('往返 commute 显式 null', p2.buyer.commute_max_minutes, null);
+eq('往返 锚点坐标', p2.buyer.work_location_coords, [121.4737, 31.2304]);
   eq('往返 array2', p2.budget.total_range_wan, [380, 560]);
   eq('往返 bool', p2.preferences.elevator_required, false);
   eq('往返 give_up_below', p2.thresholds.give_up_below, 3.2);
@@ -296,7 +299,7 @@ thresholds:
   eq('parse/update 键集合对称',
     PROFILE_FIELDS.every(f => {
       const patch = { [f.section]: { [f.key]: f.kind === 'array2' ? [1, 2] : f.kind === 'bool' ? true : 1 } };
-      const out = updateProfileFields('buyer:\n  city: x\n  work_location: x\n  commute_max_minutes: 60\nbudget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\npreferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\nthresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n', patch);
+      const out = updateProfileFields('buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\nbudget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\npreferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\nthresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n', patch);
       return out.applied.length === 1 && !out.missing.length;
     }), true);
 }

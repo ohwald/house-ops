@@ -12,6 +12,7 @@
 export const PROFILE_FIELDS = [
   { section: 'buyer', key: 'city', kind: 'scalar' },
   { section: 'buyer', key: 'work_location', kind: 'scalar', form: 'p-work-location' },
+  { section: 'buyer', key: 'work_location_coords', kind: 'array2' },
   { section: 'buyer', key: 'commute_max_minutes', kind: 'numberOrNull', form: 'p-commute-minutes' },
   { section: 'budget', key: 'total_range_wan', kind: 'array2', form: ['p-price-min', 'p-price-max'] },
   { section: 'budget', key: 'walk_away_wan', kind: 'number', form: 'p-price-walkaway' },
