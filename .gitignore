@@ -21,6 +21,9 @@ reports/*
 **/.env.local
 .mcp.json
 
+# ===== AI 客户端本地会话数据（WorkBuddy 等；每台机器不同，不入库）=====
+.workbuddy/
+
 # ===== 依赖（dashboard 的 ink/react；脚本层本身零依赖）=====
 node_modules/
 
