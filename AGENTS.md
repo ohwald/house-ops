@@ -33,7 +33,7 @@
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
 | `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段与 `market:` 多市场段） |
-| `templates/` | 政策数据表 `policy-notes.cn.yml` / `policy-notes.eu.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` / `official-sources.eu.yml` |
+| `templates/` | 政策数据表 `policy-notes.{cn,eu,apac}.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.{cn,eu,apac}.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
 
@@ -106,7 +106,10 @@
 | `templates/contract-checklist.cn.yml` | 交易文件条款走查清单（contract 模式用） |
 | `templates/official-sources.cn.yml` | 各城市政务房地产公开数据源登记表（scan 模式交叉验证用） |
 | `templates/official-sources.eu.yml` | 欧洲各国官方/公开数据源登记表（含 tier 落在可靠度四档哪一层） |
+| `templates/policy-notes.apac.yml` | 亚太政策数据表（中国香港/新加坡/日本：印花税与税费/流程/产权与年期/持有成本/外国人规则，带 as_of 与 conflict 标记，用前核实） |
+| `templates/official-sources.apac.yml` | 亚太各市场官方/公开数据源登记表（含 tier 落在可靠度四档哪一层） |
 | `docs/markets/eu.md` | 欧洲选国理由、开放数据现实约束与扩展方式（新增市场前先读） |
+| `docs/markets/apac.md` | 亚太三市场的成交价可得性差异、退出机制差别与已记录的口径冲突（新增市场前先读） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |

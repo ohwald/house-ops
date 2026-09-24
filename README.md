@@ -174,12 +174,14 @@ Score tiers: **≥4.5 strongly recommended** · **4.0–4.4 worth a viewing** ·
 
 ## Market coverage
 
-Mainland China plus a first European batch (UK / Ireland / France / Netherlands / Germany / Spain), each with a policy
-table (`templates/policy-notes.eu.yml`) and a public-data registry (`templates/official-sources.eu.yml`). The decisive
-criterion for including a country was **whether a deal price can be checked per unit by anyone**:
+Mainland China plus a first European batch (UK / Ireland / France / Netherlands / Germany / Spain) and a first
+Asia-Pacific batch (Hong Kong (China) / Singapore / Japan), each with a policy table and a public-data registry
+(`templates/policy-notes.{eu,apac}.yml`, `templates/official-sources.{eu,apac}.yml`). The decisive criterion for
+including a market was **whether a deal price can be checked per unit by anyone**:
 
 ```bash
-node scripts/scan.mjs official --market eu   # 17 registry entries, each tagged with its evidence tier
+node scripts/scan.mjs official --market eu     # 17 registry entries, each tagged with its evidence tier
+node scripts/scan.mjs official --market apac   # 18 more, for hk / sg / jp
 ```
 
 Only the UK, Ireland and France publish transaction-level sold prices (Land Registry PPD, PSRA PPR, DVF);
@@ -187,6 +189,15 @@ Germany, the Netherlands and Spain do not, so their listings honestly cap out at
 start from `suspect` provenance. Where public sources disagree (Dutch transfer tax, Bremen's GrESt rate) the table
 keeps both numbers under `conflict: true` instead of averaging them. Rationale and tier-2 candidates:
 [docs/markets/eu.md](docs/markets/eu.md).
+
+The APAC batch splits three ways, and the split is what matters: Hong Kong (China) records the consideration on the
+Land Registry, so a sold price can be verified per unit (paid per search); Singapore publishes real transaction-level
+HDB resale data from 1990 while private condos only appear through URA caveats, which are voluntary and cover roughly
+80–90% of resales; Japan publishes nothing at unit level, so a Japanese listing tops out at "the contracted range for
+comparable stock in this area" and the report has to say so out loud. Exit mechanics differ just as sharply — Hong
+Kong binds at the provisional agreement and Singapore binds at the option fee, while Japan has no statutory
+cooling-off but does have handmoney release and a loan contingency **that only exist if written into the contract**.
+Details and the recorded source conflicts: [docs/markets/apac.md](docs/markets/apac.md).
 
 The market also drives the numbers themselves: `config/profile.yml` carries a `market:` block (code, currency,
 `price_scale` of `wan` vs `whole`, `area_unit` of `sqm` vs `sqft`, buyer class, tenure, minimum lease years) that
@@ -414,18 +425,27 @@ intake 建画像 → 看到候选 → triage 速筛 → scan 验真+采价
 
 ## 市场覆盖范围
 
-中国大陆之外，已纳入第一批欧洲市场（英国/爱尔兰/法国/荷兰/德国/西班牙），各配一张政策表
-（`templates/policy-notes.eu.yml`）与一条公开数据源登记（`templates/official-sources.eu.yml`）。
+中国大陆之外，已纳入第一批欧洲市场（英国/爱尔兰/法国/荷兰/德国/西班牙）与第一批亚太市场
+（中国香港/新加坡/日本），各配一张政策表与一份公开数据源登记
+（`templates/policy-notes.{eu,apac}.yml`、`templates/official-sources.{eu,apac}.yml`）。
 选国的决定性标准是**这套房的成交价能不能被任何人逐套复核**：
 
 ```bash
-node scripts/scan.mjs official --market eu   # 17 条登记，每条标注落在可靠度四档的哪一层
+node scripts/scan.mjs official --market eu    # 17 条登记，每条标注落在可靠度四档的哪一层
+node scripts/scan.mjs official --market apac  # 另有 18 条，覆盖 hk / sg / jp
 ```
 
 只有英国（Land Registry PPD）、爱尔兰（PSRA PPR）、法国（DVF）公开了交易级成交价；
 德国、荷兰、西班牙没有，因此这些市场的房源诚实封顶在"公开统计/开放登记"档，provenance 从 suspect 起步。
 公开来源互相打架的口径（荷兰过户税、不来梅的 GrESt 税率）表里同时保留两个数字并标 `conflict: true`，不做取平均。
 选取依据与第二批候选见 [docs/markets/eu.md](docs/markets/eu.md)。
+
+亚太三档的可得性完全不同，这也是报告必须说清楚的部分：中国香港的土地注册处登记册记载成交代价，
+能核实单套成交价（按次收费，不是开放数据）；新加坡的组屋转售是真正的交易级开放数据（1990 年起），
+但私宅只有 URA 的 caveat——自愿登记、覆盖率约八到九成、异常值被剔除；日本**没有单套级成交价**，
+只能到同区同类型的成約区间。退出机制的差别同样致命：中国香港签临时买卖合约即绑定、新加坡 OTP 定金即具约束力，
+两地都没有冷静期；日本没有法定冷静期，但「手付解除」与「融资特约」两个阀门**必须写进契约才存在**。
+细节与已记录的口径冲突见 [docs/markets/apac.md](docs/markets/apac.md)。
 
 市场规模决定数字怎么读：`config/profile.yml` 的 `market:` 段记录市场码、币种、金额口径（`wan` 万元 vs `whole`
 本币整额）、面积单位（sqm vs sqft）、买家分档、产权形态与最短可接受租期，`intake` 第一步采集、后续所有报告

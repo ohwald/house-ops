@@ -11,6 +11,7 @@
 | 流程/评分口径的用户覆盖 | `modes/_custom.md` | 存在才读，优先级最高 |
 | 中国政策事实（限购/税费/利率/学区） | `templates/policy-notes.cn.yml` + 联网核实 | 涉及时 ALWAYS |
 | 欧洲政策事实（过户税/流程/产权形态/持有成本） | `templates/policy-notes.eu.yml` + 联网核实（conflict 口径须显式提示） | 房源在欧洲时 ALWAYS |
+| 亚太政策事实（中国香港/新加坡/日本） | `templates/policy-notes.apac.yml` + 联网核实（conflict 口径须显式提示） | 房源在亚太时 ALWAYS |
 | 市场清单、开放数据源与成交价可得性 | `templates/official-sources.<market>.yml`，经 `node scripts/scan.mjs official --market <code>` | 跨市场评估 ALWAYS（不凭记忆写数据源 URL） |
 | 关注清单 | `data/watchlist.md` | watchlist 模式 ALWAYS |
 
@@ -57,15 +58,15 @@
 
 ### 多市场适配（Market Dimension）
 
-画像 `config/profile.yml` 的 `market:` 段决定单位与口径；已登记市场：`cn` / `uk`（英格兰与威尔士）/ `ie` / `fr` / `nl` / `de` / `es`。
+画像 `config/profile.yml` 的 `market:` 段决定单位与口径；已登记市场：`cn` / `uk`（英格兰与威尔士）/ `ie` / `fr` / `nl` / `de` / `es` / `hk`（中国香港）/ `sg` / `jp`。
 
 **单位与币种（改写所有数字前先确认）**
 
 | 字段 | 取值 | 含义 |
 |---|---|---|
-| `market.currency` | CNY / GBP / EUR | 金额符号与税费口径 |
-| `market.price_scale` | `wan` / `whole` | `wan` = 数字 × 1 万本币（400 = 400 万）；`whole` = 本币整额（450000 = £450,000）。`budget.total_range_wan` 等键名带 `_wan` 是历史命名，读数一律按 `price_scale` 解释 |
-| `market.area_unit` | `sqm` / `sqft` | 面积单位；英国挂牌常用 sq ft，**1 ㎡ ≈ 10.764 sq ft**，换算必须在报告里标注系数 |
+| `market.currency` | CNY / GBP / EUR / HKD / SGD / JPY | 金额符号与税费口径 |
+| `market.price_scale` | `wan` / `whole` | `wan` = 数字 × 1 万本币（400 = 400 万）；`whole` = 本币整额（450000 = £450,000）。中国/中国香港/日本惯用 `wan`，欧洲与新加坡惯用 `whole`。`budget.total_range_wan` 等键名带 `_wan` 是历史命名，读数一律按 `price_scale` 解释 |
+| `market.area_unit` | `sqm` / `sqft` | 面积单位；英国/中国香港/新加坡挂牌常用 sq ft，**1 ㎡ ≈ 10.764 sq ft**，换算必须在报告里标注系数。日本虽用 ㎡，但土地与业界口语用坪（1 坪 ≈ 3.3058 ㎡） |
 
 同一份报告内不得混用单位；跨市场对比时统一换算到其中一个单位并注明。
 
@@ -74,7 +75,9 @@
 | 市场 | 交易级成交价 | 后果 |
 |---|---|---|
 | `uk` / `ie` / `fr` | ✅ 有（PPD / PPR / DVF） | 挂牌-成交对照可做到 `成交数据` 档 |
-| `nl` / `de` / `es` | ❌ **没有** | 最好的档位是「公开统计 / 开放登记」；provenance 从 `suspect` 起步，报告**必须显式提示**成交核验无法完成，不得用片区均值冒充成交价 |
+| `hk` | ✅ 有（土地注册处 IRIS 记载成交代价；一手盘看成交纪录册） | 可核实单套成交价，但**按次收费**，不是开放数据 |
+| `sg` | ⚠️ 部分有（组屋转售逐笔开放；私宅只有 URA caveat） | 组屋可到 `成交数据`；私宅的 caveat 属自愿登记、覆盖率约 80–90%、异常值被剔除、2015 年起新售不是 caveat，三类成交不得混算 |
+| `nl` / `de` / `es` / `jp` | ❌ **没有** | 最好的档位是「公开统计 / 开放登记」；日本只能到同区同类型的成約区间（MLIT 成約価格情報为 REINS 加工、取引価格情報为问卷）。provenance 从 `suspect` 起步，报告**必须显式提示**成交核验无法完成，不得用片区均值冒充成交价 |
 
 查源一律用 `node scripts/scan.mjs official --market <code>`（`<code>` 可为 `cn` / `eu` / 国别码），不要凭记忆写数据源 URL。
 
@@ -87,9 +90,12 @@
 | `fr` | copropriété 欠费或已决议大修分摊；DPE 触发出租禁令/强制整修 |
 | `de` | 州 Grunderwerbsteuer 与现金型交易成本超预算；WEG 储备不足 |
 | `es` | 未登记加建/扩建；Catastro 登记与实际不符；Valor de Referencia 造成的税基高于成交价 |
+| `hk` | 查册发现押记/命令/钉契且未能剔除；僭建或维修令未了结；已决议大额维修分摊；按揭估价不足且现金不足 |
+| `sg` | ABSD 现金不足（外国人 60% 不得以贷款或公积金支付）；组屋 MOP/配额不符或外国人买组屋；有地住宅未取得 SLA 批准 |
+| `jp` | 再建筑不可（建筑基准法接道不足）；旧耐震基准导致无法融资；修繕積立金严重不足且已决议一次性征收；物件位于重要土地等調査法的特别注视区域而未办事前届出 |
 | `cn` | 非 70 年住宅产权 / 商办；限购资格不符；学位已被占用 |
 
-**退出成本差异影响谈判建议**（negotiate 模式必须区分）：法国 compromis 后 **10 天**可无责退出、荷兰买家 **3 天**冷静期、**西班牙 Arras 定金已带罚则**、英格兰要到 **exchange** 才互相绑定——"随时可以反悔"在某个市场成立，在另一个市场是昂贵误判。
+**退出成本差异影响谈判建议**（negotiate 模式必须区分）：法国 compromis 后 **10 天**可无责退出、荷兰买家 **3 天**冷静期、**西班牙 Arras 定金已带罚则**、英格兰要到 **exchange** 才互相绑定；**中国香港签临时买卖合约即绑定（无法定冷静期，违约没收定金）**、**新加坡 OTP 阶段的定金即具约束力**、**日本没有法定冷静期，但有手付解除与融资特约两个必须写进契约的退出阀门**——"随时可以反悔"在某个市场成立，在另一个市场是昂贵误判。
 
 **欧洲挂牌平台尚未注册为 scraper 模块**（Rightmove/Zoopla、Idealista/Fotocasa、Funda、ImmoScout24、SeLoger、Daft.ie）：只能走 generic 兜底清单采集，**不得把兜底结果标注成结构化字段采集**，也不得手写未经验证的选择器。
 

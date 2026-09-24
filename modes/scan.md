@@ -13,7 +13,7 @@
 | `node scripts/scan.mjs detect <url>...` | 识别平台/页面类型/城市码/房源 ID，输出该平台的提取字段清单、成交源提示与注意事项 |
 | `node scripts/scan.mjs normalize <record.json>` | 价格单位归一 + 单价一致性检查（记录走 stdout，警告走 stderr） |
 | `node scripts/scan.mjs crosscheck <record.json> --write` | 挂牌价 vs 可比成交偏差与结论，写回 `crosscheck` 字段 |
-| `node scripts/scan.mjs official [关键词] [--market cn\|eu]` | 列出政务/官方数据源登记表（默认跨全部登记文件；欧洲部分见 `templates/official-sources.eu.yml`） |
+| `node scripts/scan.mjs official [关键词] [--market cn\|eu\|apac\|<国别码>]` | 列出政务/官方数据源登记表（默认跨全部登记文件；欧洲见 `templates/official-sources.eu.yml`，亚太见 `templates/official-sources.apac.yml`，tier 字段说明该源能到可靠度四档哪一层） |
 | `node scripts/scan.mjs history [关键词] [--stale-days N]` | 无参=房源实体时效表（跨平台/重挂归并）；关键词=单实体时间线与策略信号 |
 | `node scripts/scan.mjs match <record.json>` | 新扫描 vs 全库指纹匹配：识别跨平台同源挂牌与下架重挂 |
 | `node scripts/scan.mjs verify <record.json> [--evidence ev.json]` | 真实性验证判定表：URL实访/小区存在性/挂牌存在性/价格vs均价/单价一致性/满五交叉/混居判别 → provenance 建议 |

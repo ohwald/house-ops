@@ -85,8 +85,8 @@ house-ops — AI 购房搜索·汇总·分析操作台
    - `triage`：只读 `modes/_brief.md`（存在才读）→ 对应 mode 文件（省 token 的关键）。
    - `compare`/`visit`/`contract`：读 `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件 + 相关房源报告。
 2. **其他**（`intake`、`watchlist`、`stats`、`doctor`）：读 `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件。
-3. 任何模式涉及**政策事实**时按房源所在市场取表：中国大陆读 `templates/policy-notes.cn.yml`，欧洲读 `templates/policy-notes.eu.yml`（英/爱/法/荷/德/西），并遵守其"用前联网核实"与"conflict 口径显式提示"规则；`contract` 另读 `templates/contract-checklist.cn.yml`。
+3. 任何模式涉及**政策事实**时按房源所在市场取表：中国大陆读 `templates/policy-notes.cn.yml`，欧洲读 `templates/policy-notes.eu.yml`（英/爱/法/荷/德/西），亚太读 `templates/policy-notes.apac.yml`（中国香港/新加坡/日本），并遵守其"用前联网核实"与"conflict 口径显式提示"规则；`contract` 另读 `templates/contract-checklist.cn.yml`。
 5. `stats` 优先跑 `node scripts/stats.mjs`，失败或需要更深解读时按 mode 文件人工汇总。
-6. `scan`：只读 `modes/scan.md`；先跑 `node scripts/scan.mjs detect <url>` 获取平台与字段清单；涉及成交价/政务数据时跑 `node scripts/scan.mjs official [关键词] [--market cn|eu]` 查可用的公开数据源登记表（用前联网核实；欧洲部分见 `templates/official-sources.eu.yml` 的 tier 字段与 `docs/markets/eu.md`）；可靠度档位以 `modes/_shared.md`「数据可靠度四档」节为准。
+6. `scan`：只读 `modes/scan.md`；先跑 `node scripts/scan.mjs detect <url>` 获取平台与字段清单；涉及成交价/政务数据时跑 `node scripts/scan.mjs official [关键词] [--market cn|eu|apac|<国别码>]` 查可用的公开数据源登记表（用前联网核实；各表的 tier 字段说明该源能到可靠度四档哪一层，欧洲见 `docs/markets/eu.md`，亚太见 `docs/markets/apac.md`）；可靠度档位以 `modes/_shared.md`「数据可靠度四档」节为准。
 
 加载顺序纪律：系统层（`_shared.md`）先读，用户层（`_profile.md`、`_custom.md`、`_brief.md`）后读并覆盖系统默认。
