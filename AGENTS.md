@@ -16,7 +16,7 @@
 
 | 路径 | 内容 |
 |---|---|
-| `config/profile.yml` | 购房需求画像（预算/城市/资格/偏好/权重），从 `profile.example.yml` 生成 |
+| `config/profile.yml` | 购房需求画像（`market:` 市场与单位口径 + 预算/城市/资格/偏好/权重），从 `profile.example.yml` 生成 |
 | `modes/_profile.md` | 画像的语义补充（生活方式、一票否决规则、权重取舍理由） |
 | `modes/_custom.md` | 家规：用户对流程/评分规则的个性化覆盖 |
 | `data/` | 运行时状态：`watchlist.md`（关注清单）、`notes/`（带看记录等） |
@@ -32,7 +32,7 @@
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
-| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段） |
+| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段与 `market:` 多市场段） |
 | `templates/` | 政策数据表 `policy-notes.cn.yml` / `policy-notes.eu.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` / `official-sources.eu.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
@@ -89,7 +89,7 @@
 | 文件 | 职责 |
 |---|---|
 | `modes/_shared.md` | 评分体系六维定义、配套分级参考、小区软素质信号、分档解读、全局 NEVER/ALWAYS、SoT 表——评估类模式必读 |
-| `modes/intake.md` | 多轮对话采集购房需求（家庭结构→衍生需求翻译），生成 `config/profile.yml` + `modes/_profile.md` + `modes/_brief.md` |
+| `modes/intake.md` | 多轮对话采集购房需求（市场与单位口径→家庭结构→衍生需求翻译），生成 `config/profile.yml` + `modes/_profile.md` + `modes/_brief.md` |
 | `modes/evaluate.md` | 单房源六维评级，产出报告并登记 watchlist；Machine Summary schema 的 SoT |
 | `modes/triage.md` | 60 秒快速速筛（`_brief.md` 三问），不落报告 |
 | `modes/scan.md` | 平台扫描与价格采集：按平台模板提取挂牌字段、多源收集成交价、政务数据交叉验证（不评分，落 `data/scans/`） |
@@ -106,6 +106,7 @@
 | `templates/contract-checklist.cn.yml` | 交易文件条款走查清单（contract 模式用） |
 | `templates/official-sources.cn.yml` | 各城市政务房地产公开数据源登记表（scan 模式交叉验证用） |
 | `templates/official-sources.eu.yml` | 欧洲各国官方/公开数据源登记表（含 tier 落在可靠度四档哪一层） |
+| `docs/markets/eu.md` | 欧洲选国理由、开放数据现实约束与扩展方式（新增市场前先读） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
@@ -157,7 +158,7 @@
 ## 约定
 
 - **报告编号**：3 位零填充（`001`、`002`…）。优先用 `node scripts/reserve-report-num.mjs` 原子分配（headless/并行场景必须用）；脚本不可用时手动取 `reports/` 现有最大编号 +1。小区 slug 用拼音或短横线小写。
-- **输出语言**：默认中文（`config/profile.yml` 的 `language.output` 可改）。金额用"万元"表述，单价用"元/㎡"。
+- **输出语言**：默认中文（`config/profile.yml` 的 `language.output` 可改）。单位一律按 `market:` 段：中国市场金额用"万元"、单价用"元/㎡"；欧洲市场按 `market.currency`（GBP/EUR）+ `market.price_scale`（本币整额）+ `market.area_unit`（sqm/sqft）。
 - **路径**：所有读写以仓库根（含 `AGENTS.md` 与 `modes/` 的目录）为基准，不受当前工作目录影响。
 - **Machine Summary**：schema 的 SoT 是 `modes/evaluate.md`；`scripts/stats.mjs` 按 same schema 解析，改键名必须同步两处。
 - **提交信息（Git Commits）**：英文 Conventional Commits（`feat(map): ...` / `fix(core): ...` / `docs: ...` / `chore(repo): ...`），面向开源协作者；正文可中文补充细节。推送前确认 CI 通过，且用户层数据（`data/`、`reports/`、`config/profile.yml`、`modes/_*.md`）绝不入库（`.github/workflows/ci.yml` 有 privacy guard 强制）。

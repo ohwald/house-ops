@@ -244,6 +244,15 @@ eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
 
 // ---------- profile 契约（C4：键表驱动 parse/update 对称 + 往返 golden） ----------
 
+// 覆盖 PROFILE_FIELDS 全部键的最小 YAML：键集合对称性测试要求每个键都能命中一行
+const ALL_KEYS_YAML = 'market:\n  code: x\n  country: x\n  city_local: x\n  currency: x\n'
+  + '  price_scale: x\n  area_unit: x\n  buyer_class: x\n  residency_status: x\n'
+  + '  tenure_preference: x\n  min_lease_years: 1\n'
+  + 'buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\n'
+  + 'budget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\n'
+  + 'preferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\n'
+  + 'thresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n';
+
 const profileYaml = `buyer:
   city: 上海
   work_location: 黄浦区人民广场  # 通勤锚点
@@ -299,9 +308,32 @@ eq('往返 锚点坐标', p2.buyer.work_location_coords, [121.4737, 31.2304]);
   eq('parse/update 键集合对称',
     PROFILE_FIELDS.every(f => {
       const patch = { [f.section]: { [f.key]: f.kind === 'array2' ? [1, 2] : f.kind === 'bool' ? true : 1 } };
-      const out = updateProfileFields('buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\nbudget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\npreferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\nthresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n', patch);
+      const out = updateProfileFields(ALL_KEYS_YAML, patch);
       return out.applied.length === 1 && !out.missing.length;
     }), true);
+
+  // 多市场段：欧洲市场的 market.* 键必须可解析、可往返
+  const euYaml = `market:
+  code: uk  # 英格兰与威尔士
+  country: 英国（英格兰与威尔士）
+  city_local: London
+  currency: GBP
+  price_scale: whole
+  area_unit: sqft
+  buyer_class: additional_property
+  residency_status: 非居民
+  tenure_preference: leasehold
+  min_lease_years: 85
+`;
+  const eu = parseProfile(euYaml);
+  eq('parse market.code', eu.market.code, 'uk');
+  eq('parse market 剥离注释', eu.market.country, '英国（英格兰与威尔士）');
+  eq('parse market.min_lease_years', eu.market.min_lease_years, 85);
+  eq('update market 段', updateProfileFields(euYaml, { market: { code: 'nl', currency: 'EUR' } }).applied,
+    ['market.code', 'market.currency']);
+  has('update market 保留注释', /# 英格兰与威尔士/.test(
+    updateProfileFields(euYaml, { market: { code: 'nl' } }).text));
+  eq('未知市场键 → unknown', updateProfileFields(euYaml, { market: { nope: 'x' } }).unknown, ['market.nope']);
 }
 
 // ---------- 真实性验证（verifyAuthenticity：实战案例复刻为 golden 用例） ----------

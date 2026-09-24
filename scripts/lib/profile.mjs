@@ -10,6 +10,18 @@
  * form: 地图页表单 input id（无 form = 仅 API/YAML 层字段，页面不收集）
  */
 export const PROFILE_FIELDS = [
+  // 市场段：多市场支持（cn / uk / ie / fr / nl / de / es）。无 form = 仅 API/YAML 层字段，
+  // 地图页表单不收集（市场由 intake 对话确定，不在地图上改）。
+  { section: 'market', key: 'code', kind: 'scalar' },
+  { section: 'market', key: 'country', kind: 'scalar' },
+  { section: 'market', key: 'city_local', kind: 'scalar' },
+  { section: 'market', key: 'currency', kind: 'scalar' },
+  { section: 'market', key: 'price_scale', kind: 'scalar' },
+  { section: 'market', key: 'area_unit', kind: 'scalar' },
+  { section: 'market', key: 'buyer_class', kind: 'scalar' },
+  { section: 'market', key: 'residency_status', kind: 'scalar' },
+  { section: 'market', key: 'tenure_preference', kind: 'scalar' },
+  { section: 'market', key: 'min_lease_years', kind: 'numberOrNull' },
   { section: 'buyer', key: 'city', kind: 'scalar' },
   { section: 'buyer', key: 'work_location', kind: 'scalar', form: 'p-work-location' },
   { section: 'buyer', key: 'work_location_coords', kind: 'array2' },

@@ -188,6 +188,12 @@ start from `suspect` provenance. Where public sources disagree (Dutch transfer t
 keeps both numbers under `conflict: true` instead of averaging them. Rationale and tier-2 candidates:
 [docs/markets/eu.md](docs/markets/eu.md).
 
+The market also drives the numbers themselves: `config/profile.yml` carries a `market:` block (code, currency,
+`price_scale` of `wan` vs `whole`, `area_unit` of `sqm` vs `sqft`, buyer class, tenure, minimum lease years) that
+`intake` collects first and every report's units follow — a UK listing quoted in sq ft and GBP never gets silently
+read as square metres and 万元. Adding a market means adding two template blocks; nothing in `scripts/` hardcodes the
+list, and `node scripts/doctor.mjs` reports which markets are registered.
+
 ## Architecture
 
 ```
@@ -420,6 +426,11 @@ node scripts/scan.mjs official --market eu   # 17 条登记，每条标注落在
 德国、荷兰、西班牙没有，因此这些市场的房源诚实封顶在"公开统计/开放登记"档，provenance 从 suspect 起步。
 公开来源互相打架的口径（荷兰过户税、不来梅的 GrESt 税率）表里同时保留两个数字并标 `conflict: true`，不做取平均。
 选取依据与第二批候选见 [docs/markets/eu.md](docs/markets/eu.md)。
+
+市场规模决定数字怎么读：`config/profile.yml` 的 `market:` 段记录市场码、币种、金额口径（`wan` 万元 vs `whole`
+本币整额）、面积单位（sqm vs sqft）、买家分档、产权形态与最短可接受租期，`intake` 第一步采集、后续所有报告
+按此输出——英国房源按 sq ft 与英镑报的价，不会被当成平方米和万元读。新增市场只需补两块模板，
+`scripts/` 里没有任何硬编码的市场清单，`node scripts/doctor.mjs` 会报告当前登记了哪些市场。
 
 ## 架构与数据契约
 

@@ -1,4 +1,24 @@
-# European coverage: market shortlist and open-data reality check
+# 欧洲市场覆盖 / European coverage: market shortlist and open-data reality check
+
+## 中文摘要（下方为英文详版）
+
+本文不是事实来源，只是一张「哪些源值得去核实」的地图——`templates/official-sources.eu.yml` 里每条都带
+`verify_before_use: true`。
+
+- **选国标准**：不是"热门"，而是**这套房的成交价能不能被任何人逐套复核**。
+- **交易级成交价可得性**：英国（Land Registry PPD）、爱尔兰（PSRA PPR）、法国（DVF）✅；荷兰、德国、西班牙 ❌
+  → 这三个市场 provenance 从 `suspect` 起步，必须告知用户"挂牌-成交对照无法用成交数据完成"。
+- **英国要分清法域**：苏格兰 LBTT、威尔士 LTT 与英格兰 SDLT 是三套税制，`market.country` 必须写清。
+- **欧洲挂牌平台未注册为 scraper 模块**：Rightmove/Zoopla、Idealista/Fotocasa、Funda、ImmoScout24、SeLoger、
+  Daft.ie 只能走 generic 兜底，不写未经验证的选择器。
+- **冷静期/定金差异会改变谈判建议**：法国 compromis 后 10 天可无责退出、荷兰买家 3 天、西班牙 Arras 已带罚则、
+  英格兰要 exchange 才绑定。
+- **新增一个市场** = 在 `templates/official-sources.<code>.yml` 与 `templates/policy-notes.<code>.yml` 各补一块；
+  系统层无需改代码，`node scripts/doctor.mjs` 会自动把它计入「市场覆盖」。
+- **画像适配**：`config/profile.yml` 的 `market:` 段决定币种、金额口径（万元 vs 本币整额）与面积单位（㎡ vs sq ft），
+  采集流程见 `modes/intake.md` 的 Step 0.5。
+
+---
 
 Nothing here is a fact source by itself — it is a **map of which sources are worth verifying**. Every entry in
 `templates/official-sources.eu.yml` carries `verify_before_use: true`; what follows explains why the shortlist looks
@@ -59,7 +79,12 @@ node scripts/scan.mjs official --market eu      # all 17 European registry entri
 node scripts/scan.mjs official 伦敦             # keyword across city / name / notes
 node scripts/scan.mjs official dvf             # e.g. jump straight to the French registry entry
 node scripts/scan.mjs official --market de      # one country only
+node scripts/doctor.mjs                         # market coverage + is profile.yml market.code registered?
 ```
+
+The market dimension also lives in the buyer profile: `config/profile.yml` carries a `market:` block (code, currency,
+price scale, area unit, buyer class, tenure preference, minimum lease years) that `modes/intake.md` collects in
+Step 0.5 and every report's units follow.
 
 Adding a market = adding one entry block to `templates/official-sources.eu.yml` plus one block to
 `templates/policy-notes.eu.yml`. Both files are validated alongside the Chinese ones by the repo self-check.

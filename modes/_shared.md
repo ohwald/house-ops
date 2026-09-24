@@ -11,6 +11,7 @@
 | 流程/评分口径的用户覆盖 | `modes/_custom.md` | 存在才读，优先级最高 |
 | 中国政策事实（限购/税费/利率/学区） | `templates/policy-notes.cn.yml` + 联网核实 | 涉及时 ALWAYS |
 | 欧洲政策事实（过户税/流程/产权形态/持有成本） | `templates/policy-notes.eu.yml` + 联网核实（conflict 口径须显式提示） | 房源在欧洲时 ALWAYS |
+| 市场清单、开放数据源与成交价可得性 | `templates/official-sources.<market>.yml`，经 `node scripts/scan.mjs official --market <code>` | 跨市场评估 ALWAYS（不凭记忆写数据源 URL） |
 | 关注清单 | `data/watchlist.md` | watchlist 模式 ALWAYS |
 
 ## 评分体系
@@ -53,6 +54,44 @@
 4. 全部不可得 → Price 的成交对照记 `— not evaluated`，成交价进待核实清单，**绝不估算成交价**
 
 锚点缺失时，改用**流动性信号**支撑议价判断（档位均为 `挂牌数据`）：近 30 天带看量、关注人数、在售套数、近 90 天成交套数、挂牌时长与调价方向。解读口径：高带看 + 高成交 = 热盘（少议价）；**高带看 + 低成交 = 有价无市（议价空间宽的信号）**；低带看 + 长挂牌 = 市场冷落（议价空间宽但流通性差）。
+
+### 多市场适配（Market Dimension）
+
+画像 `config/profile.yml` 的 `market:` 段决定单位与口径；已登记市场：`cn` / `uk`（英格兰与威尔士）/ `ie` / `fr` / `nl` / `de` / `es`。
+
+**单位与币种（改写所有数字前先确认）**
+
+| 字段 | 取值 | 含义 |
+|---|---|---|
+| `market.currency` | CNY / GBP / EUR | 金额符号与税费口径 |
+| `market.price_scale` | `wan` / `whole` | `wan` = 数字 × 1 万本币（400 = 400 万）；`whole` = 本币整额（450000 = £450,000）。`budget.total_range_wan` 等键名带 `_wan` 是历史命名，读数一律按 `price_scale` 解释 |
+| `market.area_unit` | `sqm` / `sqft` | 面积单位；英国挂牌常用 sq ft，**1 ㎡ ≈ 10.764 sq ft**，换算必须在报告里标注系数 |
+
+同一份报告内不得混用单位；跨市场对比时统一换算到其中一个单位并注明。
+
+**交易级成交价可得性（决定 Price 维度能做到什么）**
+
+| 市场 | 交易级成交价 | 后果 |
+|---|---|---|
+| `uk` / `ie` / `fr` | ✅ 有（PPD / PPR / DVF） | 挂牌-成交对照可做到 `成交数据` 档 |
+| `nl` / `de` / `es` | ❌ **没有** | 最好的档位是「公开统计 / 开放登记」；provenance 从 `suspect` 起步，报告**必须显式提示**成交核验无法完成，不得用片区均值冒充成交价 |
+
+查源一律用 `node scripts/scan.mjs official --market <code>`（`<code>` 可为 `cn` / `eu` / 国别码），不要凭记忆写数据源 URL。
+
+**各市场的一票否决增补项**（在通用规则之外，按 `market.code` 追加）
+
+| 市场 | 追加的硬伤项 |
+|---|---|
+| `uk` / `ie` | leasehold 剩余租期低于 `market.min_lease_years`；地租恶性递增；外墙/建筑安全整改未了结且服务费异常 |
+| `nl` | erfpacht 地租条款不可接受；VvE 储备金严重不足或已决议大修 |
+| `fr` | copropriété 欠费或已决议大修分摊；DPE 触发出租禁令/强制整修 |
+| `de` | 州 Grunderwerbsteuer 与现金型交易成本超预算；WEG 储备不足 |
+| `es` | 未登记加建/扩建；Catastro 登记与实际不符；Valor de Referencia 造成的税基高于成交价 |
+| `cn` | 非 70 年住宅产权 / 商办；限购资格不符；学位已被占用 |
+
+**退出成本差异影响谈判建议**（negotiate 模式必须区分）：法国 compromis 后 **10 天**可无责退出、荷兰买家 **3 天**冷静期、**西班牙 Arras 定金已带罚则**、英格兰要到 **exchange** 才互相绑定——"随时可以反悔"在某个市场成立，在另一个市场是昂贵误判。
+
+**欧洲挂牌平台尚未注册为 scraper 模块**（Rightmove/Zoopla、Idealista/Fotocasa、Funda、ImmoScout24、SeLoger、Daft.ie）：只能走 generic 兜底清单采集，**不得把兜底结果标注成结构化字段采集**，也不得手写未经验证的选择器。
 
 ### 来源真实性与反幻觉（Hallucination Guard）
 
@@ -134,7 +173,7 @@
 5. **始终提供多方案与情景对照（Scenario Trade-offs）**：分析"如果选择本房源获得什么 vs 承受什么代价"，并对照替代方案或观望等待方案，提供中立的沙盘推演。
 6. **覆盖决策三支柱**：深入核实并给出当地政策解读（税费/资格/学位锁）、历史成交走势（折价弹性/抗跌性/流动性）、城市规划变量（交通推进/周边地块/施工期影响）。
 7. 输出语言遵循 `config/profile.yml` 的 `language.output`（默认中文）。
-8. 报告中金额用"万元"、单价用"元/㎡"（画像另有约定除外）。
+8. 报告中的金额与面积单位一律按画像 `market.currency` / `market.price_scale` / `market.area_unit` 输出（中国默认万元与元/㎡；欧洲按本币整额与 sqm/sqft，见「多市场适配」节）。
 9. 用户层文件后读、覆盖系统层默认。
 10. 遇到无法核实的重大风险项，宁可将 Risk 记为"注意"并明示，也不默认乐观。
 11. 关键事实（小区存在性/价格/面积/学区对口/配套距离）执行「来源真实性与反幻觉」节的交叉验证门槛，报告中每个关键数字带来源标记（`[实采]`/`[政务]`/`[用户提供]`/`[未核实]`）。

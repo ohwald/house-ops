@@ -32,7 +32,7 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 
 | `$mode` 值 | 加载的 mode 文件 |
 |---|---|
-| `intake`（别名：需求、画像、onboarding） | `modes/intake.md` |
+| `intake`（别名：需求、画像、onboarding） | `modes/intake.md`（含 Step 0.5 市场轮：市场/币种/金额与面积单位/买家分档/产权形态） |
 | `evaluate`（别名：评估、评级、打分） | `modes/evaluate.md` |
 | `triage`（别名：速筛、快筛、triage） | `modes/triage.md` |
 | `scan`（别名：扫描、采集、查成交、价格核实） | `modes/scan.md` |
@@ -52,7 +52,7 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 
 ## 输出语言
 
-读 `config/profile.yml` 的 `language.output`（缺省 `zh`）。将以下指令注入本模式执行：所有面向用户的输出使用该语言（`zh`=简体中文；金额单位"万元"，单价"元/㎡"）。
+读 `config/profile.yml` 的 `language.output`（缺省 `zh`）。将以下指令注入本模式执行：所有面向用户的输出使用该语言（`zh`=简体中文）。金额与面积单位按同一文件的 `market:` 段：中国市场用"万元"与"元/㎡"；欧洲市场用 `market.currency` 本币整额与 `market.area_unit`（sqm/sqft）。
 
 ## Discovery 菜单
 

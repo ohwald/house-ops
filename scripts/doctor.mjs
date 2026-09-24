@@ -100,6 +100,32 @@ try {
   check('fail', 'scan schema 一致性', `读取失败: ${err.message}`);
 }
 
+// 7. 市场覆盖：登记表与政策表必须成对，且画像里的 market.code 要落在已登记市场内
+{
+  const tplFiles = await readdir(join(root, 'templates')).catch(() => []);
+  const grab = (re) => tplFiles.map((f) => re.exec(f)?.[1]).filter(Boolean);
+  const regMarkets = grab(/^official-sources\.(.+)\.yml$/);
+  const polMarkets = grab(/^policy-notes\.(.+)\.yml$/);
+  const codes = new Set(regMarkets);
+  for (const f of regMarkets) {
+    const text = await readFile(join(root, 'templates', `official-sources.${f}.yml`), 'utf8').catch(() => '');
+    // 条目既可能是 `- market: uk`（列表起始行）也可能是 `  market: uk`（缩进键）
+    for (const m of text.matchAll(/^\s*(?:-\s+)?market:\s*"?([a-z]{2})"?\s*(?:#.*)?$/gm)) codes.add(m[1]);
+  }
+  const unpaired = regMarkets.filter((m) => !polMarkets.includes(m));
+  check(regMarkets.length && !unpaired.length ? 'pass' : 'warn', '市场覆盖',
+    regMarkets.length
+      ? `登记表 ${regMarkets.join(', ')}；可用市场码 ${[...codes].sort().join(', ')}${unpaired.length ? `（缺政策表: ${unpaired.join(', ')}）` : ''}`
+      : '未发现 official-sources.<market>.yml');
+
+  if (profileOk) {
+    const txt = await readFile(join(root, 'config/profile.yml'), 'utf8').catch(() => '');
+    const mc = /^ {2}code:\s*"?([a-z]{2})"?\s*(?:#.*)?$/m.exec(txt)?.[1];
+    check(mc && codes.has(mc) ? 'pass' : 'warn', `画像市场码 ${mc ?? '未设置'}`,
+      mc ? (codes.has(mc) ? '' : `不在已登记市场内（${[...codes].sort().join(', ')}）`) : 'config/profile.yml 未设 market.code — 跑 /house-ops intake');
+  }
+}
+
 // 汇总输出
 let fails = 0, warns = 0;
 for (const r of results) {
