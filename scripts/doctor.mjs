@@ -23,8 +23,9 @@ const sysFiles = [
   'modes/deep-dive.md', 'modes/negotiate.md', 'modes/watchlist.md',
   'modes/triage.md', 'modes/compare.md', 'modes/visit.md',
   'modes/contract.md', 'modes/doctor.md', 'modes/stats.md', 'modes/scan.md',
-  'templates/policy-notes.cn.yml',
-  'templates/contract-checklist.cn.yml', 'templates/official-sources.cn.yml',
+  'templates/policy-notes.cn.yml', 'templates/policy-notes.eu.yml',
+  'templates/contract-checklist.cn.yml',
+  'templates/official-sources.cn.yml', 'templates/official-sources.eu.yml',
   'config/profile.example.yml',
   'package.json',
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
@@ -73,16 +74,17 @@ if (await exists(watchlistPath)) {
   check('warn', 'watchlist', '尚未创建（首次评估时自动生成）');
 }
 
-// 5. 政策表时效
-try {
-  const yml = await readFile(join(root, 'templates/policy-notes.cn.yml'), 'utf8');
-  const m = /as_of_overview:\s*(\d{4})-(\d{2})-(\d{2})/.exec(yml);
-  if (m) {
+// 5. 政策表时效（中欧两张表都要看）
+for (const f of ['templates/policy-notes.cn.yml', 'templates/policy-notes.eu.yml']) {
+  try {
+    const yml = await readFile(join(root, f), 'utf8');
+    const m = /as_of_overview:\s*(\d{4})-(\d{2})-(\d{2})/.exec(yml);
+    if (!m) continue;
     const ageDays = Math.floor((Date.now() - new Date(`${m[1]}-${m[2]}-${m[3]}`)) / 86400000);
-    check(ageDays > 90 ? 'warn' : 'pass', '政策数据表时效',
+    check(ageDays > 90 ? 'warn' : 'pass', `政策数据表时效 ${f.replace('templates/', '')}`,
       ageDays > 90 ? `as_of 已 ${ageDays} 天，建议核实更新` : `as_of ${ageDays} 天内`);
-  }
-} catch {}
+  } catch {}
+}
 
 // 6. scan schema 一致性：modes/scan.md（SoT 文本）与 _fields.mjs 导出的枚举断言
 try {

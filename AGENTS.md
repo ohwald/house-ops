@@ -33,7 +33,7 @@
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
 | `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段） |
-| `templates/` | 政策数据表 `policy-notes.cn.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` |
+| `templates/` | 政策数据表 `policy-notes.cn.yml` / `policy-notes.eu.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.cn.yml` / `official-sources.eu.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
 
@@ -102,8 +102,10 @@
 | `modes/stats.md` | 找房数据统计与失分/弃购模式分析（优先跑 `scripts/stats.mjs`） |
 | `modes/doctor.md` | 环境与数据健康自检（无 AI 快速版：`node scripts/doctor.mjs`） |
 | `templates/policy-notes.cn.yml` | 中国市场政策数据表（限购/税费/贷款/学区/商办/法拍等，带 as_of，用前核实） |
+| `templates/policy-notes.eu.yml` | 欧洲政策数据表（英/爱/法/荷/德/西：过户税/流程/产权形态/持有成本/关键核查，带 as_of 与 conflict 标记，用前核实） |
 | `templates/contract-checklist.cn.yml` | 交易文件条款走查清单（contract 模式用） |
 | `templates/official-sources.cn.yml` | 各城市政务房地产公开数据源登记表（scan 模式交叉验证用） |
+| `templates/official-sources.eu.yml` | 欧洲各国官方/公开数据源登记表（含 tier 落在可靠度四档哪一层） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |

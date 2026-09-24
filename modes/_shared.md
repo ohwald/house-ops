@@ -10,6 +10,7 @@
 | 用户需求、预算、偏好、一票否决项 | `config/profile.yml` + `modes/_profile.md` | 评估类模式 ALWAYS（无画像按缺省处理并提示） |
 | 流程/评分口径的用户覆盖 | `modes/_custom.md` | 存在才读，优先级最高 |
 | 中国政策事实（限购/税费/利率/学区） | `templates/policy-notes.cn.yml` + 联网核实 | 涉及时 ALWAYS |
+| 欧洲政策事实（过户税/流程/产权形态/持有成本） | `templates/policy-notes.eu.yml` + 联网核实（conflict 口径须显式提示） | 房源在欧洲时 ALWAYS |
 | 关注清单 | `data/watchlist.md` | watchlist 模式 ALWAYS |
 
 ## 评分体系

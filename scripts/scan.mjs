@@ -6,7 +6,7 @@
 //   node scripts/scan.mjs detect <url> [url...]          # 识别平台/页面类型，输出提取清单
 //   node scripts/scan.mjs normalize <record.json | ->    # 价格归一化 + 一致性检查（记录走 stdout，警告走 stderr）
 //   node scripts/scan.mjs crosscheck <record.json> [--write]  # 挂牌价 vs 成交价交叉验证（含归一化）
-//   node scripts/scan.mjs official [城市]                # 查政务公开数据源登记表
+//   node scripts/scan.mjs official [关键词] [--market cn|eu]   # 查政务公开数据源登记表（默认跨全部登记文件）
 //   node scripts/scan.mjs history [关键词] [--stale-days N]   # 无参=追踪时效表；关键词=单房源时间线与策略信号
 //   node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性验证（判定表输出 + provenance 建议）
 
@@ -266,29 +266,66 @@ async function cmdMatch(arg) {
   }, null, 2));
 }
 
-// 行级解析 templates/official-sources.cn.yml（登记表是扁平两缩进结构，无需 YAML 库）
-async function cmdOfficial(city) {
-  const text = await readFile(join(ROOT, 'templates', 'official-sources.cn.yml'), 'utf8');
-  const entries = [];
-  let cur = null;
-  for (const line of text.split('\n')) {
-    const start = /^\s*-\s+city:\s*(.+?)\s*$/.exec(line);
-    if (start) {
-      cur = { city: start[1].replace(/^["']|["']$/g, '') };
-      entries.push(cur);
-      continue;
-    }
-    if (!cur) continue;
-    const kv = /^\s+([a-z_]+):\s*(.*?)\s*$/.exec(line);
-    if (!kv || kv[1] === 'city') continue;
-    const inline = /^\[(.*)\]\s*$/.exec(kv[2]);
-    cur[kv[1]] = inline
-      ? inline[1].split(',').map((s) => s.trim()).filter(Boolean)
-      : kv[2].replace(/^["']|["']$/g, '');
+// 行级解析登记表（扁平两缩进结构，无需 YAML 库）。
+// 多市场：templates/official-sources.<market>.yml 全部参与；单文件缺的市场再从自身扩展。
+async function cmdOfficial(query, opts = {}) {
+  const tplDir = join(ROOT, 'templates');
+  const files = (await readdir(tplDir).catch(() => []))
+    .filter((f) => /^official-sources\.[a-z0-9_-]+\.yml$/.test(f))
+    .sort();
+  if (!files.length) {
+    console.error('⛔ templates/ 下没有 official-sources.*.yml 登记表');
+    process.exitCode = 2;
+    return;
   }
-  const list = city ? entries.filter((e) => e.city.includes(city)) : entries;
+  const entries = [];
+  for (const f of files) {
+    const marketFromFile = /^official-sources\.(.+)\.yml$/.exec(f)[1];
+    const text = await readFile(join(tplDir, f), 'utf8');
+    let cur = null;
+    for (const line of text.split('\n')) {
+      // 条目起始行同时支持 `- city: …`（CN 惯例）与 `- market: …`（EU 惯例）
+      const start = /^\s*-\s+(city|market):\s*(.+?)\s*$/.exec(line);
+      if (start) {
+        const [, key, raw] = start;
+        const val = raw.replace(/^["']|["']$/g, '');
+        cur = { market: marketFromFile, registry: marketFromFile };
+        if (key === 'market') cur.market = val;
+        else cur.city = val;
+        entries.push(cur);
+        continue;
+      }
+      if (!cur) continue;
+      const kv = /^\s+([a-z_]+):\s*(.*?)\s*$/.exec(line);
+      if (!kv) continue;
+    if (kv[1] === 'city' && cur.city !== undefined) continue;  // CN 惯例：city 由起始行给出，不重复覆盖
+      const inline = /^\[(.*)\]\s*$/.exec(kv[2]);
+      const value = inline
+        ? inline[1].split(',').map((s) => s.trim()).filter(Boolean)
+        : kv[2].replace(/^["']|["']$/g, '');
+      cur[kv[1]] = Array.isArray(value) && kv[1] === 'market' ? value.join(',') : value;
+    }
+  }
+  let list = entries;
+  if (opts.market) {
+    // 既可查「表级市场」（cn / eu），也可查「国家市场」（uk / ie / fr / nl / de / es）
+    const m = String(opts.market).toLowerCase();
+    list = list.filter((e) =>
+      String(e.market ?? '').toLowerCase() === m || String(e.registry ?? '').toLowerCase() === m);
+  }
+  if (query) {
+    const q = String(query).toLowerCase();
+    list = list.filter((e) => Object.values(e).some((v) => {
+      const parts = Array.isArray(v) ? v : [v];
+      return parts.some((p) => String(p ?? '').toLowerCase().includes(q));
+    }));
+  }
   if (!list.length) {
-    console.log(`未找到「${city ?? '全部'}」的登记条目。可自行检索「${city ?? '目标城市'} 住建委 / 房地产交易中心」官方平台，核实后按 templates/official-sources.cn.yml 现有格式补入（带 as_of 与 verify_before_use）。`);
+    const markets = [...new Set(entries.map((e) => e.market))].join(' / ');
+    console.log(`未找到「${query ?? '全部'}」${opts.market ? `（市场 ${opts.market}）` : ''}的登记条目。已登记市场：${markets}。
+ 中国城市：检索「城市名 住建委 / 房地产交易中心」官方平台；
+ 欧洲：检索各国 land registry / cadastre / 统计局官方域名；
+ 核实后按 templates/official-sources.<market>.yml 的现有格式补入（带 as_of、verify_before_use 与 tier）。`);
     process.exitCode = 2;
     return;
   }
@@ -312,4 +349,8 @@ else if (cmd === 'analyze') {
 }
 else if (cmd === 'evidence') await cmdEvidence(rest);
 else if (cmd === 'detect') await cmdDetect(rest);
+else if (cmd === 'official') {
+  const mi = rest.indexOf('--market');
+  await cmdOfficial(rest.find((a) => !a.startsWith('--')), mi >= 0 ? { market: rest[mi + 1] } : {});
+}
 else await main[cmd](rest.find((a) => !a.startsWith('--')));

@@ -172,6 +172,22 @@ Score tiers: **≥4.5 strongly recommended** · **4.0–4.4 worth a viewing** ·
 
 > **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms.
 
+## Market coverage
+
+Mainland China plus a first European batch (UK / Ireland / France / Netherlands / Germany / Spain), each with a policy
+table (`templates/policy-notes.eu.yml`) and a public-data registry (`templates/official-sources.eu.yml`). The decisive
+criterion for including a country was **whether a deal price can be checked per unit by anyone**:
+
+```bash
+node scripts/scan.mjs official --market eu   # 17 registry entries, each tagged with its evidence tier
+```
+
+Only the UK, Ireland and France publish transaction-level sold prices (Land Registry PPD, PSRA PPR, DVF);
+Germany, the Netherlands and Spain do not, so their listings honestly cap out at aggregate/open-registry tiers and
+start from `suspect` provenance. Where public sources disagree (Dutch transfer tax, Bremen's GrESt rate) the table
+keeps both numbers under `conflict: true` instead of averaging them. Rationale and tier-2 candidates:
+[docs/markets/eu.md](docs/markets/eu.md).
+
 ## Architecture
 
 ```
@@ -389,6 +405,21 @@ intake 建画像 → 看到候选 → triage 速筛 → scan 验真+采价
 | 其他平台 | generic 兜底清单 | 按通用清单采集 |
 
 > **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发页面数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。
+
+## 市场覆盖范围
+
+中国大陆之外，已纳入第一批欧洲市场（英国/爱尔兰/法国/荷兰/德国/西班牙），各配一张政策表
+（`templates/policy-notes.eu.yml`）与一条公开数据源登记（`templates/official-sources.eu.yml`）。
+选国的决定性标准是**这套房的成交价能不能被任何人逐套复核**：
+
+```bash
+node scripts/scan.mjs official --market eu   # 17 条登记，每条标注落在可靠度四档的哪一层
+```
+
+只有英国（Land Registry PPD）、爱尔兰（PSRA PPR）、法国（DVF）公开了交易级成交价；
+德国、荷兰、西班牙没有，因此这些市场的房源诚实封顶在"公开统计/开放登记"档，provenance 从 suspect 起步。
+公开来源互相打架的口径（荷兰过户税、不来梅的 GrESt 税率）表里同时保留两个数字并标 `conflict: true`，不做取平均。
+选取依据与第二批候选见 [docs/markets/eu.md](docs/markets/eu.md)。
 
 ## 架构与数据契约
 
