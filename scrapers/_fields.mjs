@@ -18,6 +18,17 @@ export const VERDICT_THRESHOLDS = [
 // 可靠度四档（SoT：modes/_shared.md「数据可靠度四档」节），index 越小越可信
 export const RELIABILITY = ['成交数据', '挂牌数据', '中介口述', '未核实'];
 
+// 扫描记录完成度：complete = 预算内查完；partial = 联网预算中断留的残缺记录（引用前先续扫）
+// SoT：modes/scan.md「联网预算与中断」节；doctor 断言 scan.md 含这两个 token。
+export const SCAN_STATUS = ['complete', 'partial'];
+
+// 联网预算（AI 侧执行，脚本只做入口提醒）：每条链接 ≤6 次、单次调用合计 ≤12 次、单次 ≤3 条链接
+export const SCAN_BUDGET = { max_urls_per_call: 3, fetches_per_listing: 6, fetches_per_call: 12 };
+
+// 政务源数据粒度原子档（SoT 本文件；templates/official-sources.*.yml 的 granularity 只能取这些值，
+// 多粒度用内联数组）。doctor 断言登记表不漂移。
+export const SOURCE_GRANULARITIES = ['单套级', '地块级', '楼盘级', '小区级', '街区级', '片区级', '区级', '全市级', '全国级'];
+
 // 各平台通用的挂牌页提取清单（AI 按 scan 模式逐项抓取）
 export const COMMON_LISTING_FIELDS = [
   '挂牌标题（话术反查用）', '小区名（含所在区/板块）', '总价（万元）', '单价（元/㎡）', '建筑面积（㎡）',
@@ -78,6 +89,19 @@ export function normalizeRecord(raw) {
   const warnings = [];
   rec.schema = SCAN_SCHEMA;
   if (!rec.scanned_at) warnings.push('scanned_at 缺失——应为扫描日期 YYYY-MM-DD');
+  // 完成度：缺失按 complete 处理（兼容旧记录）但提醒显式声明；非法值按 partial（宁存疑）
+  if (!SCAN_STATUS.includes(rec.status)) {
+    if (rec.status == null || rec.status === '') {
+      rec.status = 'complete';
+      warnings.push('status 缺失——按 complete 处理（旧记录兼容）；联网预算中断时务必显式写 "partial"');
+    } else {
+      rec.status = 'partial';
+      warnings.push(`status "${rec.status}" 非法（∈ ${SCAN_STATUS.join('|')}）→ 按 partial 处理`);
+    }
+  }
+  if (rec.status === 'partial') {
+    warnings.push('本记录 status=partial（预算中断的残缺记录）——未查项写入 unverified_items，落盘后先续扫再交给 evaluate 引用');
+  }
 
   const L = (rec.listing ??= {});
   normField(L, 'total_price_wan', parsePriceWan, warnings, 'listing.total_price_wan');

@@ -3,9 +3,9 @@
 // 零依赖（Node ≥18）。平台模板见 scrapers/（career-ops providers 模式：一平台一模块）。
 // schema SoT：modes/scan.md「扫描记录 schema」节。
 // 用法:
-//   node scripts/scan.mjs detect <url> [url...]          # 识别平台/页面类型，输出提取清单
+//   node scripts/scan.mjs detect <url> [url...]          # 识别平台/页面类型，输出提取清单（平台负载去重，>3 条提示分批）
 //   node scripts/scan.mjs normalize <record.json | ->    # 价格归一化 + 一致性检查（记录走 stdout，警告走 stderr）
-//   node scripts/scan.mjs crosscheck <record.json> [--write]  # 挂牌价 vs 成交价交叉验证（含归一化）
+//   node scripts/scan.mjs crosscheck <record.json> [--write]  # 挂牌价 vs 成交价交叉验证（含归一化；status=partial 走 stderr 提醒）
 //   node scripts/scan.mjs official [关键词] [--market cn|eu]   # 查政务公开数据源登记表（默认跨全部登记文件）
 //   node scripts/scan.mjs history [关键词] [--stale-days N]   # 无参=追踪时效表；关键词=单房源时间线与策略信号
 //   node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性验证（判定表输出 + provenance 建议）
@@ -17,6 +17,8 @@ import { loadScrapers, detectPlatform } from '../scrapers/_registry.mjs';
 import { COMMON_LISTING_FIELDS, normalizeRecord, finalizeRecord, buildEntityHistory, matchRecord, verifyAuthenticity } from '../scrapers/_fields.mjs';
 import { evidenceSave, EVIDENCE_TYPES } from './evidence.mjs';
 import { analyze } from './analysis.mjs';
+import { groupDetections, overBudgetWarning } from './lib/detect.mjs';
+import { readOfficialSources, filterSources } from './lib/official-sources.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -58,7 +60,7 @@ async function cmdDetect(urls) {
     return;
   }
   const scrapers = await loadScrapers(join(ROOT, 'scrapers'));
-  const out = urls.map((url) => {
+  const items = urls.map((url) => {
     const found = detectPlatform(url, scrapers);
     if (!found) {
       return {
@@ -66,6 +68,8 @@ async function cmdDetect(urls) {
         platform: 'generic',
         name: '未识别平台',
         page_type: 'unknown',
+        city_code: null,
+        listing_id: null,
         fields: GENERIC_FIELDS,
         hint: '未命中已知平台模板——按通用清单提取，可靠度最高按「挂牌数据」并注明来源。新平台可按 scrapers/ADDING_A_PLATFORM.md 补模板。',
       };
@@ -75,12 +79,17 @@ async function cmdDetect(urls) {
       url,
       platform: scraper.id,
       name: scraper.name,
-      ...hit,
+      page_type: hit.page_type,
+      city_code: hit.city_code ?? null,
+      listing_id: hit.listing_id ?? null,
       fields: scraper.fields,
       transaction: scraper.transaction,
       notes: scraper.notes,
     };
   });
+  // 平台负载（fields/transaction/notes）每平台只输出一次，URL 以清单挂在平台下（token 经济）
+  const out = groupDetections(items);
+  if (out.over_budget) console.error(overBudgetWarning(out.url_count));
   console.log(JSON.stringify(out, null, 2));
 }
 
@@ -266,60 +275,16 @@ async function cmdMatch(arg) {
   }, null, 2));
 }
 
-// 行级解析登记表（扁平两缩进结构，无需 YAML 库）。
-// 多市场：templates/official-sources.<market>.yml 全部参与；单文件缺的市场再从自身扩展。
+// 政务源查询：parser 与枚举断言见 scripts/lib/official-sources.mjs（scan/doctor/selftest 共用）。
+// 多市场：templates/official-sources.<market>.yml 全部参与；--market 既可查表级市场（cn/eu）也可查国别码。
 async function cmdOfficial(query, opts = {}) {
-  const tplDir = join(ROOT, 'templates');
-  const files = (await readdir(tplDir).catch(() => []))
-    .filter((f) => /^official-sources\.[a-z0-9_-]+\.yml$/.test(f))
-    .sort();
+  const { files, entries } = await readOfficialSources(ROOT);
   if (!files.length) {
     console.error('⛔ templates/ 下没有 official-sources.*.yml 登记表');
     process.exitCode = 2;
     return;
   }
-  const entries = [];
-  for (const f of files) {
-    const marketFromFile = /^official-sources\.(.+)\.yml$/.exec(f)[1];
-    const text = await readFile(join(tplDir, f), 'utf8');
-    let cur = null;
-    for (const line of text.split('\n')) {
-      // 条目起始行同时支持 `- city: …`（CN 惯例）与 `- market: …`（EU 惯例）
-      const start = /^\s*-\s+(city|market):\s*(.+?)\s*$/.exec(line);
-      if (start) {
-        const [, key, raw] = start;
-        const val = raw.replace(/^["']|["']$/g, '');
-        cur = { market: marketFromFile, registry: marketFromFile };
-        if (key === 'market') cur.market = val;
-        else cur.city = val;
-        entries.push(cur);
-        continue;
-      }
-      if (!cur) continue;
-      const kv = /^\s+([a-z_]+):\s*(.*?)\s*$/.exec(line);
-      if (!kv) continue;
-    if (kv[1] === 'city' && cur.city !== undefined) continue;  // CN 惯例：city 由起始行给出，不重复覆盖
-      const inline = /^\[(.*)\]\s*$/.exec(kv[2]);
-      const value = inline
-        ? inline[1].split(',').map((s) => s.trim()).filter(Boolean)
-        : kv[2].replace(/^["']|["']$/g, '');
-      cur[kv[1]] = Array.isArray(value) && kv[1] === 'market' ? value.join(',') : value;
-    }
-  }
-  let list = entries;
-  if (opts.market) {
-    // 既可查「表级市场」（cn / eu），也可查「国家市场」（uk / ie / fr / nl / de / es）
-    const m = String(opts.market).toLowerCase();
-    list = list.filter((e) =>
-      String(e.market ?? '').toLowerCase() === m || String(e.registry ?? '').toLowerCase() === m);
-  }
-  if (query) {
-    const q = String(query).toLowerCase();
-    list = list.filter((e) => Object.values(e).some((v) => {
-      const parts = Array.isArray(v) ? v : [v];
-      return parts.some((p) => String(p ?? '').toLowerCase().includes(q));
-    }));
-  }
+  const list = filterSources(entries, { query, market: opts.market });
   if (!list.length) {
     const markets = [...new Set(entries.map((e) => e.market))].join(' / ');
     console.log(`未找到「${query ?? '全部'}」${opts.market ? `（市场 ${opts.market}）` : ''}的登记条目。已登记市场：${markets}。

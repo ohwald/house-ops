@@ -98,7 +98,7 @@ Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run s
 ### Scanning & verification (`scripts/scan.mjs`)
 
 ```bash
-node scripts/scan.mjs detect <url> [url...]                    # identify platform/page type, print extraction checklist
+node scripts/scan.mjs detect <url> [url...]                    # identify platform/page type; per-platform payload printed once (URLs grouped), warns above 3 URLs
 node scripts/scan.mjs normalize <record.json | ->              # price normalization + consistency checks (stdout: record, stderr: warnings)
 node scripts/scan.mjs crosscheck <record.json> [--write]       # listing price vs. deal price
 node scripts/scan.mjs official [城市]                           # registered government open-data sources
@@ -351,7 +351,7 @@ npm run dashboard
 ### 扫描与验真（`scripts/scan.mjs`）
 
 ```bash
-node scripts/scan.mjs detect <url> [url...]                     # 识别平台/页面类型，输出提取清单
+node scripts/scan.mjs detect <url> [url...]                     # 识别平台/页面类型；平台负载只输出一次（URL 分组），>3 条提示分批
 node scripts/scan.mjs normalize <record.json | ->               # 价格归一化 + 一致性检查（记录走 stdout，警告走 stderr）
 node scripts/scan.mjs crosscheck <record.json> [--write]        # 挂牌价 vs 成交价交叉验证
 node scripts/scan.mjs official [城市]                            # 查政务公开数据源登记表

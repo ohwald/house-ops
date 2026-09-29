@@ -5,8 +5,9 @@
 
 import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { SCAN_SCHEMA, PAGE_TYPES, RELIABILITY } from '../scrapers/_fields.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, SCAN_STATUS } from '../scrapers/_fields.mjs';
+import { checkGranularity } from './lib/official-sources.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -30,12 +31,38 @@ const sysFiles = [
   'config/profile.example.yml',
   'package.json',
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
-  'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/dashboard.mjs',
+  'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/lib/detect.mjs',
+  'scripts/lib/official-sources.mjs', 'scripts/dashboard.mjs',
   'scripts/map.mjs',
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
 ];
 for (const f of sysFiles) {
   check((await exists(join(root, f))) ? 'pass' : 'fail', `系统文件 ${f}`, exists ? '' : '缺失');
+}
+
+// 1b. 平台模块：registry 遇坏模块只打警告并跳过（识别静默降级 generic），doctor 必须把它变成阻塞项
+{
+  const expected = ['5i5j', 'anjuke', 'beike', 'fang', 'lianjia']; // 已登记平台的基线，缺一个即 ⛔
+  const dir = join(root, 'scrapers');
+  const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.mjs') && !f.startsWith('_'));
+  const broken = [];
+  const ids = [];
+  for (const f of files) {
+    try {
+      const mod = await import(pathToFileURL(join(dir, f)).href);
+      const s = mod.default;
+      if (!s || !s.id || typeof s.detect !== 'function') { broken.push(`${f}（default export 需为 { id, detect }）`); continue; }
+      ids.push(s.id);
+    } catch (err) {
+      broken.push(`${f}（加载失败: ${err.message}）`);
+    }
+  }
+  check(broken.length ? 'fail' : 'pass', `平台模块可加载（${files.length} 个）`,
+    broken.length ? `${broken.join('; ')}——识别会静默退回 generic` : files.join(', '));
+  const missing = expected.filter((id) => !ids.includes(id));
+  check(missing.length ? 'fail' : 'pass', '平台模块基线',
+    missing.length ? `缺失平台模块: ${missing.join(', ')}——识别会静默退回 generic，按 scrapers/ADDING_A_PLATFORM.md 补回`
+      : `已登记 ${ids.length} 个（含基线 ${expected.join('/')}）`);
 }
 
 // 2. 技能符号链接
@@ -94,11 +121,23 @@ try {
     SCAN_SCHEMA,
     ...PAGE_TYPES,
     ...RELIABILITY,
+    ...SCAN_STATUS,
   ].filter((token) => !scanDoc.includes(token));
   check(missing.length ? 'fail' : 'pass', 'scan schema 一致性（scan.md ↔ _fields.mjs）',
     missing.length ? `scan.md 缺少 schema token: ${missing.join(', ')}` : '');
 } catch (err) {
   check('fail', 'scan schema 一致性', `读取失败: ${err.message}`);
+}
+
+// 6b. 政务源 granularity 枚举自一致（取值必须落在 SOURCE_GRANULARITIES 原子档内，多粒度用内联数组）
+try {
+  const g = await checkGranularity(root);
+  check(g.bad.length ? 'fail' : 'pass', '政务源 granularity 枚举自一致',
+    g.bad.length
+      ? `${g.bad.length} 处漂移: ${g.bad.map((b) => `${b.file}/${b.city}="${Array.isArray(b.value) ? b.value.join(',') : b.value}"（非法: ${b.unknown.join(',')}）`).join('; ')}`
+      : `${g.files.join(', ')} 共 ${g.checked} 条粒度取值合规`);
+} catch (err) {
+  check('fail', '政务源 granularity 枚举自一致', `读取失败: ${err.message}`);
 }
 
 // 7. 市场覆盖：登记表与政策表必须成对，且画像里的 market.code 要落在已登记市场内
