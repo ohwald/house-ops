@@ -8,9 +8,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   finalizeRecord, SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, VERDICT_THRESHOLDS,
+  SCAN_STATUS, SCAN_BUDGET, SOURCE_GRANULARITIES,
   buildPriceHistory, historyKey, listingFingerprint, matchRecord, buildEntityHistory,
   verifyAuthenticity,
 } from '../scrapers/_fields.mjs';
+import { groupDetections, overBudgetWarning } from './lib/detect.mjs';
+import { checkGranularity, readOfficialSources, filterSources } from './lib/official-sources.mjs';
 import { authenticityFromNote, effectiveProvenance } from './lib/data.mjs';
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
@@ -447,6 +450,68 @@ eq('SCAN_SCHEMA', SCAN_SCHEMA, 'house-ops.scan/1');
 has('PAGE_TYPES 含 transaction_list', PAGE_TYPES.includes('transaction_list'));
 eq('RELIABILITY 四档', RELIABILITY.length, 4);
 has('verdict 阈值升序覆盖', VERDICT_THRESHOLDS[0].verdict === 'below_deal' && VERDICT_THRESHOLDS.at(-1).verdict === 'far_above');
+
+// ---------- 完成度 status 与联网预算（issue #1） ----------
+
+{
+  const base = { scanned_at: '2026-09-29', platform: 'lianjia', listing: { total_price_wan: 500, unit_price: 50000, area_sqm: 100 } };
+  const { record, warnings } = finalizeRecord({ ...base });
+  eq('status 缺失 → complete（旧记录兼容）+ 提醒', record.status, 'complete');
+  has('status 缺失有提醒', warnings.some((w) => /status 缺失/.test(w)));
+
+  const bad = finalizeRecord({ ...base, status: 'done' });
+  eq('非法 status → partial（宁存疑）', bad.record.status, 'partial');
+  has('非法 status 有提醒', bad.warnings.some((w) => /非法/.test(w)));
+
+  const part = finalizeRecord({ ...base, status: 'partial' });
+  eq('partial 保留', part.record.status, 'partial');
+  has('partial 走 stderr 提醒（先续扫再引用）', part.warnings.some((w) => /status=partial/.test(w)));
+
+  const full = finalizeRecord({ ...base, status: 'complete' });
+  eq('complete 保留', full.record.status, 'complete');
+  has('complete 不打 partial 提醒', !full.warnings.some((w) => /status=partial/.test(w)));
+}
+
+eq('SCAN_STATUS 全集', SCAN_STATUS, ['complete', 'partial']);
+eq('预算口径：单次 ≤3 条 / 每条 ≤6 次 / 单次合计 ≤12 次',
+  [SCAN_BUDGET.max_urls_per_call, SCAN_BUDGET.fetches_per_listing, SCAN_BUDGET.fetches_per_call], [3, 6, 12]);
+
+// ---------- detect 输出按平台去重（issue #3） ----------
+
+{
+  const items = [
+    { url: 'a', platform: 'beike', name: '贝壳找房', page_type: 'listing', city_code: 'sh', listing_id: '1', fields: ['F'], transaction: { pattern: null }, notes: ['N'] },
+    { url: 'b', platform: 'beike', name: '贝壳找房', page_type: 'listing', city_code: 'sh', listing_id: '2', fields: ['F'], transaction: { pattern: null }, notes: ['N'] },
+    { url: 'c', platform: 'lianjia', name: '链家', page_type: 'transaction', city_code: 'sh', listing_id: '3', fields: ['G'], transaction: null, notes: [] },
+  ];
+  const out = groupDetections(items);
+  eq('平台分组数（3 条链接 → 2 个平台）', out.platforms.length, 2);
+  eq('平台负载每平台一份', out.platforms.map((p) => p.fields.length), [1, 1]);
+  eq('URL 清单挂在平台下', out.platforms.map((p) => p.urls.map((u) => u.url)), [['a', 'b'], ['c']]);
+  eq('逐 URL 保留 page_type/listing_id', out.platforms[0].urls[1], { url: 'b', page_type: 'listing', city_code: 'sh', listing_id: '2' });
+  has('3 条未超预算', out.over_budget === false);
+
+  const five = [...items, ...items.slice(0, 2).map((x, i) => ({ ...x, url: `x${i}` }))];
+  const over = groupDetections(five);
+  has('>3 条标记超预算', over.over_budget === true && over.url_count === 5);
+  has('超预算提醒含上限与分批指引', /上限 3 条/.test(overBudgetWarning(5)) && /分批/.test(overBudgetWarning(5)));
+  eq('空输入不炸', groupDetections([]), { url_count: 0, max_urls_per_call: 3, over_budget: false, platforms: [] });
+}
+
+// ---------- 政务源 granularity 枚举自一致（issue #3） ----------
+
+{
+  const g = await checkGranularity(ROOT);
+  has('登记表已发现', g.files.length >= 3);
+  eq('granularity 取值无漂移', g.bad, []);
+  has('原子档覆盖常用粒度', ['单套级', '小区级', '楼盘级', '全市级', '区级', '全国级'].every((t) => SOURCE_GRANULARITIES.includes(t)));
+
+  const { entries } = await readOfficialSources(ROOT);
+  has('每条登记条目都带 registry（表级市场，防文件名解析回归）', entries.every((e) => !!e.registry));
+  has('表级市场 --market eu 可命中（registry 回退）', filterSources(entries, { market: 'eu' }).length > 0);
+  has('国别码 --market uk 可命中', filterSources(entries, { market: 'uk' }).length > 0);
+  has('关键词过滤可用', filterSources(entries, { query: '深圳' }).length === 1);
+}
 
 // ---------- 平台 detect 矩阵 ----------
 
