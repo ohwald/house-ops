@@ -1,17 +1,17 @@
 ---
 name: house-ops
 description: >-
-  AI 购房搜索·汇总·分析操作台——多轮对话明确购房需求（预算/孩子年龄/老人照护/特殊需求），
-  对公开在售房源（优先中国大陆）做个性化评级打分，速筛、扫描房源采集挂牌/成交价、
-  多盘对比、深挖高分房源
-  （历史价格/周边环境/本地政策），审合同条款，并给出沟通谈判建议。
-  Use when the user pastes a property listing URL or description, wants to
-  clarify home-buying needs, quickly triage, scan a listing for
-  listing-vs-transaction price cross-check, compare listings, deep-dive a
-  highly scored property, review a purchase contract, record a viewing, ask
-  for negotiation advice, or manage the watchlist. 当用户粘贴房源链接或描述、
-  想明确购房需求、速筛/扫描/对比房源、深挖某套房源、审合同、记录带看、要谈判
-  沟通建议或管理关注清单时使用。
+  驱动 agent 的一体化购房决策体系：需求画像、政策税费、城市规划、市场动态四路输入合成同一套判断；
+  扫描挂牌、用成交价锚点交叉验证、六维评分，产出 Markdown 报告与 TUI 操作台。每个数字标注来源档位，
+  无法证实存在的房源整份作废而非降权。当用户粘贴房源链接或描述、想明确购房需求、速筛/扫描/对比房源、
+  深挖某套房源、审合同、记录带看、要谈判沟通建议或管理关注清单时使用。
+  English: Agent-driven home-buying decision system — needs profile, policy and taxes, urban planning
+  and market movement folded into one judgment; scans listings, cross-checks asking price against
+  deal-price anchors, scores six dimensions, writes Markdown reports and a TUI console. Every figure
+  carries a source tier; a property that cannot be verified is voided, not downgraded. Use when the
+  user pastes a property listing URL or description, wants to clarify home-buying needs, triage, scan,
+  compare or deep-dive listings, review a purchase contract, record a viewing, ask for negotiation
+  advice, or manage the watchlist.
 arguments: mode
 user-invocable: true
 argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit | negotiate | contract | watchlist | stats | doctor]"
