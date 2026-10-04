@@ -21,11 +21,21 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 
 ## Project Root 解析
 
-从本 SKILL.md 所在位置向上查找同时包含 `AGENTS.md` 和 `modes/` 的目录，记为 PROJECT_ROOT。后续所有读写以 PROJECT_ROOT 为基准（不依赖当前工作目录）。
+从本 SKILL.md 所在位置向上查找同时包含 `AGENTS.md` 和 `modes/` 的目录，记为 PROJECT_ROOT。
+
+**找不到时**（本技能被装进 Agent 受管技能目录，如 `~/.claude/skills/house-ops/`，那里没有 `AGENTS.md`）
+退而查找同时包含 `modes/` 和 `scripts/` 的目录作为 PROJECT_ROOT。
+
+后续所有读写以 PROJECT_ROOT 为基准（不依赖当前工作目录）。
+
+本技能目录自带指向仓库根的软链：`modes/`、`scripts/`、`scrapers/`、`templates/`、`config/`、
+`docs/`、`data/`、`reports/`——安装时会被展开为实体副本，所以**任何安装形态下 PROJECT_ROOT 都是自包含的**。
+仓库内工作时解析到仓库根（那里有 `AGENTS.md`）；受管目录安装时解析到技能目录本身。
 
 ## 调用说明
 
 - ZCode / Claude Code：`/house-ops <mode>`，或自然语言触发（由 AGENTS.md 的语义路由表映射）。
+- 受管技能目录安装形态下可能没有 `AGENTS.md`，自然语言触发不可用，请显式使用 `/house-ops <mode>`。
 - `$mode` 为空时显示下方 Discovery 菜单。
 
 ## Mode Routing
@@ -78,7 +88,7 @@ house-ops — 驱动 agent，帮你把房选好
 
 ## 按 Mode 加载上下文
 
-所有模式都先读 `AGENTS.md`（会话已注入则跳过）。然后：
+所有模式都先读 `AGENTS.md`（不存在则跳过；会话已注入则跳过）。然后：
 
 1. **评估类**（`evaluate`、`triage`、`deep-dive`、`negotiate`、`compare`、`visit`、`contract`）：
    - `evaluate`/`deep-dive`/`negotiate`：按顺序读 `modes/_shared.md` → `modes/_profile.md`（存在才读）→ `modes/_custom.md`（存在才读）→ 对应 mode 文件。
