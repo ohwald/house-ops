@@ -22,6 +22,10 @@ async function exists(p) {
 // 不是故障——按副本口径跳过，否则装完跑 doctor 会白得 5 个 ⛔。
 const isSkillPackage = await exists(join(root, 'SKILL.md'));
 const REPO_ONLY_FILES = new Set(['CLAUDE.md', 'README.md', 'config/profile.example.yml']);
+// 分发副本里 AGENTS.md 可以没有：`npx skills add` 只会带走 skill 目录内的东西，而 AGENTS.md
+// 刻意不做软链（链了会让 Project Root 从仓库根掉进 skill 目录）。缺它只是失去自然语言路由，
+// 不是故障——降为建议并说明后果，否则装完跑 doctor 会白得一个 ⛔。
+const SOFT_FILES_IN_PACKAGE = new Set(['AGENTS.md']);
 
 // 1. 系统层完整性
 const sysFiles = [
@@ -44,7 +48,15 @@ const sysFiles = [
 ];
 for (const f of sysFiles) {
   if (isSkillPackage && REPO_ONLY_FILES.has(f)) continue;
-  check((await exists(join(root, f))) ? 'pass' : 'fail', `系统文件 ${f}`, exists ? '' : '缺失');
+  if (await exists(join(root, f))) {
+    check('pass', `系统文件 ${f}`, '');
+    continue;
+  }
+  if (isSkillPackage && SOFT_FILES_IN_PACKAGE.has(f)) {
+    check('warn', `系统文件 ${f}`, '分发副本不含 AGENTS.md：自然语言触发不可用，请用 /house-ops <mode> 显式调用');
+  } else {
+    check('fail', `系统文件 ${f}`, '缺失');
+  }
 }
 
 // 1b. 平台模块：registry 遇坏模块只打警告并跳过（识别静默降级 generic），doctor 必须把它变成阻塞项
