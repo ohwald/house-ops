@@ -13,7 +13,7 @@
 //
 // 用法：node scripts/package-skill.mjs [输出目录]
 
-import { rm, mkdir, cp, readdir, stat } from 'node:fs/promises';
+import { rm, mkdir, cp, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,10 +39,12 @@ async function main() {
   await cp(join(ROOT, 'AGENTS.md'), join(OUT, 'AGENTS.md'));
   console.log('  + AGENTS.md');
 
-  // 3. 清掉任何本地残留的用户数据，再放干净的占位/模板
+  // 3. 清掉任何本地残留的用户数据，再放干净的占位/模板。
+  //    .gitkeep 不能省：空目录在打包传输中会整个丢失，装过去就没有写报告的地方了。
   for (const d of ['data', 'reports']) {
     await rm(join(OUT, d), { recursive: true, force: true });
     await mkdir(join(OUT, d), { recursive: true });
+    await writeFile(join(OUT, d, '.gitkeep'), '');
   }
   console.log('  + data/ reports/（清空为占位，不含本地记录）');
 
