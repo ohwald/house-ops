@@ -2,9 +2,9 @@
 
 # house-ops
 
-**A terminal-first house-hunting workspace that runs inside your coding agent.**
-Claude Code, Codex, ZCode, Cursor — any agent that reads `AGENTS.md` can drive it.
-The agent scans, verifies and scores; results come back as Markdown reports and a TUI console. You look at the rooms, you talk to the agent, you make the call.
+**Drive your agent, choose the right home.**
+
+A terminal-first house-hunting workspace that runs inside your coding agent — Claude Code, Codex, ZCode, Cursor, any agent that reads `AGENTS.md`. Your needs, local policy, urban planning and market movement, folded into one decision system: it scans, cross-checks and scores, then lands Markdown reports and a TUI console. Every number is sourced. The call stays yours.
 
 [![CI](https://github.com/ohwald/house-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/ohwald/house-ops/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
@@ -19,7 +19,7 @@ The agent scans, verifies and scores; results come back as Markdown reports and 
 
 house-ops is not an application — it is a **skills + modes + scripts** layer your coding agent executes:
 
-- **No runtime of its own.** Your AI CLI is the runtime. There is no server to deploy, no account, no cloud sync; your data stays in `data/` and `reports/` inside your repo.
+- **No runtime of its own.** Your agent is the runtime. There is no server to deploy, no account, no cloud sync; your data stays in `data/` and `reports/` inside your repo.
 - **Deterministic work is scripted.** Platform detection, price normalization, cross-validation, verification tables, statistics: zero-dependency Node ≥18 scripts. Tokens go to judgment, not arithmetic.
 - **Reports are plain files.** Every evaluation lands in `reports/{NNN}-{小区}-{日期}.md` with a machine-readable summary block, so the TUI, `stats`, and the map all read the same source of truth.
 
@@ -304,7 +304,7 @@ house-ops output is AI-generated analysis for reference only — not investment,
 
 ## Acknowledgements
 
-[career-ops](https://github.com/career-ops-hq/career-ops) — the original "turn your AI CLI into a life-ops center" blueprint.
+[career-ops](https://github.com/career-ops-hq/career-ops) — the original "turn your agent into a life-ops center" blueprint.
 
 ---
 
@@ -318,13 +318,15 @@ house-ops output is AI-generated analysis for reference only — not investment,
 
 # house-ops
 
-> 一套**终端优先、面向 Agent** 的购房决策操作台：跑在你的编码 Agent 里（Claude Code、Codex、ZCode、Cursor 均可）。
-> Agent 负责搜索、交叉验证、打分分析；结果汇集成 Markdown 报告，并在 TUI 操作台里呈现。
-> 看房、谈判、拍板，始终是你。
+> **驱动 agent，帮你把房选好。**
+>
+> 一套**终端优先、面向 agent** 的一体化购房决策体系：跑在你的编码 agent 里（Claude Code、Codex、ZCode、Cursor 均可），
+> 把**需求画像、政策税费、城市规划、市场动态**合成同一套判断——扫描、交叉验证、打分，结果落成 Markdown 报告与 TUI 操作台。
+> 每个数字都有出处；看房、谈判、拍板，始终是你。
 
-## 它不是应用，是 Agent 的执行层
+## 它不是应用，是 agent 的执行层
 
-- **没有独立运行时**——你的 AI CLI 就是运行时。无部署、无账号、无云端同步，数据只落在仓库的 `data/` 与 `reports/`。
+- **没有独立运行时**——你的 agent 就是运行时。无部署、无账号、无云端同步，数据只落在仓库的 `data/` 与 `reports/`。
 - **确定性工作交给脚本**——平台识别、价格归一化、成交交叉验证、真实性判定表、统计，全部是 Node ≥18 零依赖脚本，让 token 花在判断上而不是算术上。
 - **报告是纯文本**——每次评级落 `reports/{NNN}-{小区}-{日期}.md`（含 Machine Summary），TUI、`stats`、地图读的是同一份事实源。
 
@@ -590,4 +592,4 @@ house-ops 输出为 AI 生成的分析参考，不构成投资、法律或税务
 
 ## 致谢
 
-[career-ops](https://github.com/career-ops-hq/career-ops) —— "把 AI CLI 变成生活操作中枢"的原始范式。
+[career-ops](https://github.com/career-ops-hq/career-ops) —— "把 agent 变成生活操作中枢"的原始范式。
