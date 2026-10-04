@@ -57,7 +57,7 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 ## Discovery 菜单
 
 ```
-house-ops — AI 购房搜索·汇总·分析操作台
+house-ops — 驱动 agent，帮你把房选好
 
   /house-ops intake      多轮对话明确你的购房需求，生成需求画像（首次使用先跑这个）
   /house-ops triage      60 秒速筛：粘贴链接快速判断值不值得完整评估

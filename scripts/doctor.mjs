@@ -17,6 +17,12 @@ async function exists(p) {
   try { await access(p); return true; } catch { return false; }
 }
 
+// 分发副本模式：scripts/package-skill.mjs 生成的 ClawHub skill 目录，根上有 SKILL.md
+// 且不含仓库级文件（README/CLAUDE.md）与各客户端软链。这些在副本里缺失是设计如此，
+// 不是故障——按副本口径跳过，否则装完跑 doctor 会白得 5 个 ⛔。
+const isSkillPackage = await exists(join(root, 'SKILL.md'));
+const REPO_ONLY_FILES = new Set(['CLAUDE.md', 'README.md', 'config/profile.example.yml']);
+
 // 1. 系统层完整性
 const sysFiles = [
   'AGENTS.md', 'CLAUDE.md', 'README.md',
@@ -37,6 +43,7 @@ const sysFiles = [
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
 ];
 for (const f of sysFiles) {
+  if (isSkillPackage && REPO_ONLY_FILES.has(f)) continue;
   check((await exists(join(root, f))) ? 'pass' : 'fail', `系统文件 ${f}`, exists ? '' : '缺失');
 }
 
@@ -65,12 +72,16 @@ for (const f of sysFiles) {
       : `已登记 ${ids.length} 个（含基线 ${expected.join('/')}）`);
 }
 
-// 2. 技能符号链接
-for (const link of ['.claude/skills/house-ops', '.zcode/skills/house-ops']) {
-  const p = join(root, link);
-  let ok = false;
-  try { ok = (await stat(p)).isDirectory() && (await exists(join(p, 'SKILL.md'))); } catch {}
-  check(ok ? 'pass' : 'fail', `技能链接 ${link}`, ok ? '' : '不可解析或缺 SKILL.md');
+// 2. 技能符号链接（分发副本自带 SKILL.md，不需要各客户端软链）
+if (isSkillPackage) {
+  check('pass', '技能入口 SKILL.md', '分发副本模式：根目录即技能本体');
+} else {
+  for (const link of ['.claude/skills/house-ops', '.zcode/skills/house-ops']) {
+    const p = join(root, link);
+    let ok = false;
+    try { ok = (await stat(p)).isDirectory() && (await exists(join(p, 'SKILL.md'))); } catch {}
+    check(ok ? 'pass' : 'fail', `技能链接 ${link}`, ok ? '' : '不可解析或缺 SKILL.md');
+  }
 }
 
 // 3. 用户层状态
