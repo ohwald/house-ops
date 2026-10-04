@@ -23,6 +23,19 @@ house-ops is not an application — it is a **skills + modes + scripts** layer y
 - **Deterministic work is scripted.** Platform detection, price normalization, cross-validation, verification tables, statistics: zero-dependency Node ≥18 scripts. Tokens go to judgment, not arithmetic.
 - **Reports are plain files.** Every evaluation lands in `reports/{NNN}-{小区}-{日期}.md` with a machine-readable summary block, so the TUI, `stats`, and the map all read the same source of truth.
 
+## Install
+
+```bash
+npx skills add ohwald/house-ops
+```
+
+That installs the skill into your agent's own skill directory — Claude Code, Codex, Cursor, ZCode, OpenCode and
+70+ more ([skills.sh](https://skills.sh/ohwald/house-ops)). Prefer to clone instead?
+
+```bash
+git clone https://github.com/ohwald/house-ops.git && cd house-ops
+```
+
 ## Works with your agent
 
 The skill entry point is `.agents/skills/house-ops/SKILL.md`. `.claude/skills/house-ops` and `.zcode/skills/house-ops` are symlinks to it — **point any other agent's skill directory at the same folder and it gets the same routing**, or just let the agent read the root `AGENTS.md`.
@@ -80,6 +93,45 @@ An [Ink](https://github.com/vadimdemedes/ink) terminal interface reading `report
 | `q` / `Esc` | Back to the list / quit |
 
 Non-TTY (piped to a file or CI) prints one static plain-text frame — same data, no interactivity. Listings marked `void` are filtered at the shared data layer (ADR-0002), so the TUI, `stats`, and the map can never disagree.
+
+Below is a real frame rendered from the bundled sample data (`docs/examples/fixture/` — synthetic communities, no real listings). The UI itself is Chinese:
+
+```text
+house-ops 购房操作台  2026-10-04  ·  评估报告 5 份 · 候选 5 套 · 均分 3.70
+
+ 关注清单 [按综合评分高→低] (上下移动) ───────────────────
+   编号   小区/项目       板块              总价万  评分    风险
+▶  001    云栖里          上海/浦东金桥     535     4.5     低
+   002    澜庭雅苑        上海/闵行莘庄南   480     4.1     低
+   ⚠ 003  明湖半岛        上海/松江大学城   520     3.8     中
+   ⚠ 004  锦绣年华        上海/嘉定新城     510     3.6     中
+   005    梧桐郡          上海/浦东周浦     480     2.5     高
+
+ 综合评分分布 ────────────────────────────────────────────
+<3.0     █ 1
+3.0-3.5  ·
+3.5-4.0  ██ 2
+4.0-4.5  █ 1
+4.5+     █ 1
+
+ Top 高分房源 ────────────────────────────────────────────
+1. 001 云栖里  评分 4.5  强推
+2. 002 澜庭雅苑  评分 4.1  值得看
+3. 003 明湖半岛  评分 3.8  看情况
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ↑/↓: 移动 · Enter/m: 地图定位 · i: 报告 · o: 挂牌页 · p: 排序 · r: 刷新 · q: │
+│  退出                                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+The sample watchlist has a sixth row marked ⛔ (fabricated listing) — it never reaches the table, because void data is filtered at the shared data layer. Reproduce the frame yourself:
+
+```bash
+npm install && COLUMNS=90 node scripts/dashboard.mjs docs/examples/fixture
+```
+
+A full sample evaluation report: [`docs/examples/fixture/reports/001-yunqili-2026-10-04.md`](docs/examples/fixture/reports/001-yunqili-2026-10-04.md).
 
 ## Terminal commands
 
@@ -276,6 +328,19 @@ house-ops output is AI-generated analysis for reference only — not investment,
 - **确定性工作交给脚本**——平台识别、价格归一化、成交交叉验证、真实性判定表、统计，全部是 Node ≥18 零依赖脚本，让 token 花在判断上而不是算术上。
 - **报告是纯文本**——每次评级落 `reports/{NNN}-{小区}-{日期}.md`（含 Machine Summary），TUI、`stats`、地图读的是同一份事实源。
 
+## 安装
+
+```bash
+npx skills add ohwald/house-ops
+```
+
+这条命令会把技能装进你自己的 Agent 技能目录——Claude Code、Codex、Cursor、ZCode、OpenCode 等 70+ 种
+（见 [skills.sh](https://skills.sh/ohwald/house-ops)）。也可以直接克隆：
+
+```bash
+git clone https://github.com/ohwald/house-ops.git && cd house-ops
+```
+
 ## 接入各类 Agent
 
 技能入口是 `.agents/skills/house-ops/SKILL.md`，`.claude/skills/house-ops` 与 `.zcode/skills/house-ops` 都是指向它的符号链接。**把任意其他 Agent 的技能目录也软链到同一目录**，或让它直接读取仓库根的 `AGENTS.md`，即可复用同一套路由。
@@ -333,6 +398,45 @@ npm run dashboard
 | `q` / `Esc` | 返回列表 / 退出 |
 
 非 TTY 环境（管道输出或 CI）自动降级为单帧纯文本，数据一致但不可交互。作废房源在共享数据层即被过滤（ADR-0002），因此 TUI、`stats`、地图三者口径永远一致。
+
+下面是用仓库自带样例数据（`docs/examples/fixture/`，小区与数字全部虚构）真实渲染出的一帧：
+
+```text
+house-ops 购房操作台  2026-10-04  ·  评估报告 5 份 · 候选 5 套 · 均分 3.70
+
+ 关注清单 [按综合评分高→低] (上下移动) ───────────────────
+   编号   小区/项目       板块              总价万  评分    风险
+▶  001    云栖里          上海/浦东金桥     535     4.5     低
+   002    澜庭雅苑        上海/闵行莘庄南   480     4.1     低
+   ⚠ 003  明湖半岛        上海/松江大学城   520     3.8     中
+   ⚠ 004  锦绣年华        上海/嘉定新城     510     3.6     中
+   005    梧桐郡          上海/浦东周浦     480     2.5     高
+
+ 综合评分分布 ────────────────────────────────────────────
+<3.0     █ 1
+3.0-3.5  ·
+3.5-4.0  ██ 2
+4.0-4.5  █ 1
+4.5+     █ 1
+
+ Top 高分房源 ────────────────────────────────────────────
+1. 001 云栖里  评分 4.5  强推
+2. 002 澜庭雅苑  评分 4.1  值得看
+3. 003 明湖半岛  评分 3.8  看情况
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ↑/↓: 移动 · Enter/m: 地图定位 · i: 报告 · o: 挂牌页 · p: 排序 · r: 刷新 · q: │
+│  退出                                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+样例 watchlist 里还有第 6 行标了 ⛔（虚构房源），但它不会出现在表格里——作废数据在共享数据层就被过滤了。想自己跑出这一帧：
+
+```bash
+npm install && COLUMNS=90 node scripts/dashboard.mjs docs/examples/fixture
+```
+
+一份完整的示例评估报告：[`docs/examples/fixture/reports/001-yunqili-2026-10-04.md`](docs/examples/fixture/reports/001-yunqili-2026-10-04.md)。
 
 ## 终端命令
 
