@@ -30,7 +30,15 @@ npx skills add ohwald/house-ops
 ```
 
 That installs the skill into your agent's own skill directory — Claude Code, Codex, Cursor, ZCode, OpenCode and
-70+ more ([skills.sh](https://skills.sh/ohwald/house-ops)). Prefer to clone instead?
+70+ more ([skills.sh](https://skills.sh/ohwald/house-ops)).
+
+For the OpenClaw crowd there is a reviewed listing on ClawHub:
+
+```bash
+clawhub install house-ops
+```
+
+Or browse it first: [clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops). Prefer to clone instead?
 
 ```bash
 git clone https://github.com/ohwald/house-ops.git && cd house-ops
@@ -337,7 +345,15 @@ npx skills add ohwald/house-ops
 ```
 
 这条命令会把技能装进你自己的 Agent 技能目录——Claude Code、Codex、Cursor、ZCode、OpenCode 等 70+ 种
-（见 [skills.sh](https://skills.sh/ohwald/house-ops)）。也可以直接克隆：
+（见 [skills.sh](https://skills.sh/ohwald/house-ops)）。
+
+OpenClaw 用户可以直接装 ClawHub 上经过审核的条目：
+
+```bash
+clawhub install house-ops
+```
+
+详情页：[clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops)。也可以直接克隆：
 
 ```bash
 git clone https://github.com/ohwald/house-ops.git && cd house-ops
