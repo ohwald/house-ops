@@ -30,7 +30,11 @@ npx skills add ohwald/house-ops
 ```
 
 That installs the skill into your agent's own skill directory — Claude Code, Codex, Cursor, ZCode, OpenCode and
-70+ more ([skills.sh](https://skills.sh/ohwald/house-ops)).
+70+ more ([skills.sh](https://skills.sh/ohwald/house-ops)). The skill folder mirrors the repository
+(`modes/`, `scripts/`, `scrapers/`, `templates/`, `config/`, `docs/`), so the installed copy is self-contained:
+every mode and every script works after install. `npm install` inside the installed folder is only needed for
+the TUI (`npm run dashboard`). On Windows, clone with `git config core.symlinks true` so those mirrors are
+real symlinks rather than text files.
 
 For the OpenClaw crowd there is a reviewed listing on ClawHub:
 
@@ -345,7 +349,10 @@ npx skills add ohwald/house-ops
 ```
 
 这条命令会把技能装进你自己的 Agent 技能目录——Claude Code、Codex、Cursor、ZCode、OpenCode 等 70+ 种
-（见 [skills.sh](https://skills.sh/ohwald/house-ops)）。
+（见 [skills.sh](https://skills.sh/ohwald/house-ops)）。技能目录自带仓库镜像（`modes/`、`scripts/`、
+`scrapers/`、`templates/`、`config/`、`docs/`），所以装完即自包含：13 个模式与全部脚本都能直接用；
+只有 TUI 需要先在装好的目录里 `npm install`。Windows 克隆时请打开 `git config core.symlinks true`，
+否则这些镜像会退化成文本文件。
 
 OpenClaw 用户可以直接装 ClawHub 上经过审核的条目：
 
