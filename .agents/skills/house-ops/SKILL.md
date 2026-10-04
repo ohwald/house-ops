@@ -29,7 +29,9 @@ argument-hint: "[intake | triage | evaluate | scan | deep-dive | compare | visit
 后续所有读写以 PROJECT_ROOT 为基准（不依赖当前工作目录）。
 
 本技能目录自带指向仓库根的软链：`modes/`、`scripts/`、`scrapers/`、`templates/`、`config/`、
-`docs/`、`data/`、`reports/`——安装时会被展开为实体副本，所以**任何安装形态下 PROJECT_ROOT 都是自包含的**。
+`docs/markets/`、`data/`、`reports/`、`package.json`——安装时会被展开为实体副本，所以**任何安装形态下
+PROJECT_ROOT 都是自包含的**。只镜像运行时真正读到的部分：`docs/` 下仅 `markets/`（欧洲/亚太市场手册）
+被引用，截图、虚构样例、ADR 与仓库协作文档一概不带。
 仓库内工作时解析到仓库根（那里有 `AGENTS.md`）；受管目录安装时解析到技能目录本身。
 
 ## 调用说明

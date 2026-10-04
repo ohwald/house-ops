@@ -11,7 +11,10 @@
 //   - config/profile.yml 由 example 生成，data/ reports/ 清空为占位——本地这几处
 //     含真实画像与看房记录，绝不能进分发包。
 //
-// 用法：node scripts/package-skill.mjs [输出目录]
+// 用法：node tools/package-skill.mjs [输出目录]
+//
+// 为什么放在 tools/ 而不是 scripts/：scripts/ 会被镜像进技能目录、从而进到每个用户的机器上，
+// 而这个脚本只服务于发版，对使用者毫无用处。
 
 import { rm, mkdir, cp, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';

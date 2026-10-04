@@ -17,7 +17,7 @@ async function exists(p) {
   try { await access(p); return true; } catch { return false; }
 }
 
-// 分发副本模式：scripts/package-skill.mjs 生成的 ClawHub skill 目录，根上有 SKILL.md
+// 分发副本模式：tools/package-skill.mjs 生成的 ClawHub skill 目录，根上有 SKILL.md
 // 且不含仓库级文件（README/CLAUDE.md）与各客户端软链。这些在副本里缺失是设计如此，
 // 不是故障——按副本口径跳过，否则装完跑 doctor 会白得 5 个 ⛔。
 const isSkillPackage = await exists(join(root, 'SKILL.md'));
