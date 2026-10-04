@@ -16,5 +16,5 @@ Use GitHub [private security advisories](https://github.com/ohwald/house-ops/sec
 
 ## Out of scope | 不在范围
 
-- The AI CLI itself (report upstream), prompt-injection *content* inside listing pages — the system already treats listing content as untrusted data, never as instructions; new bypasses of that discipline are in scope though
-- AI CLI 自身的问题请报给上游；房源页面内的指令注入内容默认按不可信数据处理，若发现绕过该纪律的新途径则属于范围内
+- The coding agent itself (report upstream), prompt-injection *content* inside listing pages — the system already treats listing content as untrusted data, never as instructions; new bypasses of that discipline are in scope though
+- 编码 agent 自身的问题请报给上游；房源页面内的指令注入内容默认按不可信数据处理，若发现绕过该纪律的新途径则属于范围内

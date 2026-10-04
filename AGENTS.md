@@ -2,7 +2,7 @@
 
 将 AI 编程 CLI 变成购房决策中枢：评估世界各地公开在售房源（优先中国大陆市场），按用户真实需求个性化打分，对高分房源深挖调研并给出沟通谈判建议。
 
-设计参考 [career-ops](https://github.com/career-ops-hq/career-ops)：本仓库不是独立应用，而是一套由 AI CLI 执行的 skills / modes / 配置体系。它被设计为"属于你的系统"——用户可以随时要求你（AI）直接修改配置文件来调整行为。
+设计参考 [career-ops](https://github.com/career-ops-hq/career-ops)：本仓库不是独立应用，而是一套由编码 agent 执行的 skills / modes / 配置体系。它被设计为"属于你的系统"——用户可以随时要求你（AI）直接修改配置文件来调整行为。
 
 ---
 
