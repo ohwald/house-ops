@@ -4,9 +4,10 @@
 // 用法: node scripts/selftest.mjs    # 全部通过 exit 0；任何断言失败 exit 1
 // 纪律：新增行为先在这里加 golden 用例；穿过 CLI stdout / TUI 的测试不属于测试面。
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, stat, lstat, realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import {
   finalizeRecord, SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, VERDICT_THRESHOLDS,
   SCAN_STATUS, SCAN_BUDGET, SOURCE_GRANULARITIES,
@@ -703,6 +704,43 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
     // 模板自带的结构标签只有 div/span；任何出现在之外的标签都来自被注入的数据。
     eq('恶意房源字段渲染后不产出 DIV/SPAN 之外的标签', [...new Set(tags.filter(t => t !== 'div' && t !== 'span'))], []);
     has('恶意房源字段渲染后不含 <script / <img', !/<script|<img[\s>]/.test(rendered));
+  }
+}
+
+// ---------- dashboard 打开外部链接：命令注入防回归 ----------
+// openExternal 会被喂抓取来的房源链接。旧实现把它们拼进 exec 的 shell 字符串，
+// 只转义了双引号，挡不住 `; rm -rf` / $(...) / 反引号。现在跑真实函数验证行为。
+{
+  const dashSrc = await readFile(join(ROOT, 'scripts', 'dashboard.mjs'), 'utf8');
+  has('dashboard 不把外部目标拼进 shell 字符串', !/exec\(\s*`[^`]*\$\{/.test(dashSrc));
+  has('dashboard 打开外部目标走 execFile（参数不经 shell）', /execFile\(/.test(dashSrc));
+
+  const fnStart = dashSrc.indexOf('function openExternal(target) {');
+  has('能定位到 openExternal', fnStart > 0);
+  if (fnStart > 0) {
+    let depth = 0, i = dashSrc.indexOf('{', fnStart);
+    for (; i < dashSrc.length; i++) {
+      if (dashSrc[i] === '{') depth++;
+      else if (dashSrc[i] === '}') { depth--; if (!depth) break; }
+    }
+    const constSrc = dashSrc.split('\n').filter(l => /^const (HTTP_URL|ANY_SCHEME) =/.test(l)).join('\n');
+    const calls = [], errs = [];
+    const openExternal = new Function(
+      'ROOT', 'resolve', 'sep', 'fileURLToPath', 'pathToFileURL', 'existsSync', 'execFile', 'console', 'URL',
+      `${constSrc}\n${dashSrc.slice(fnStart, i + 1)}\nreturn openExternal;`,
+    )(ROOT, resolve, sep, fileURLToPath, pathToFileURL, existsSync,
+      (_c, a, cb) => { calls.push(a); cb?.(null); }, { error: m => errs.push(m) }, URL);
+
+    for (const target of ['https://example.com/listing/1', 'AGENTS.md']) {
+      calls.length = 0;
+      openExternal(target);
+      has(`openExternal 放行正常目标：${target.slice(0, 30)}`, calls.length === 1);
+    }
+    for (const target of ['; rm -rf /', '$(whoami)', '`id`', 'javascript:alert(1)', 'smb://evil/share', resolve(ROOT, '../outside.md')]) {
+      calls.length = 0; errs.length = 0;
+      openExternal(target);
+      has(`openExternal 拦下恶意/越界目标：${target.slice(0, 26)}`, calls.length === 0 && errs.length === 1);
+    }
   }
 }
 

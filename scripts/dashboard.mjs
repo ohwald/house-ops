@@ -9,9 +9,10 @@
 //   p: 切换排序 · r: 刷新数据 · q / Esc: 退出程序或返回主列表
 // （交易状态跟踪已移除，见 docs/adr/0001——watchlist 为纯候选清单，备注即事实）
 
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { exec } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { collectReports, parseWatchlist, readReportDetail, num } from './lib/data.mjs';
 
 // ink 的依赖链（string-width）用到了 RegExp 的 v flag，Node 18 上一加载就是 SyntaxError。
@@ -31,10 +32,43 @@ const h = React.createElement;
 const ROOT = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ---------- 跨平台打开 URL 或文件 ----------
+// 打开的目标里有一部分是**抓取来的房源链接**，所以：
+// 1) 不能拼进 shell 字符串——只转义双引号挡不住 `; rm -rf` 这类注入。一律 execFile 传数组，参数不经 shell。
+// 2) 按目标类型分别放行：http(s) 交给浏览器；仓库内的文件才允许打开，其余 scheme（javascript:、smb:…）一律拒绝。
+const HTTP_URL = /^https?:\/\//i;
+const ANY_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 function openExternal(target) {
   if (!target) return;
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${String(target).replace(/"/g, '\\"')}"`);
+  const raw = String(target).trim();
+
+  let openArg = null;
+  if (HTTP_URL.test(raw)) {
+    openArg = raw;
+  } else if (/^file:\/\//i.test(raw) || !ANY_SCHEME.test(raw)) {
+    // 自己生成的 file:// URL，或仓库内的裸路径 —— 都必须落在 ROOT 内且真实存在
+    let abs = raw;
+    let tail = '';
+    if (/^file:\/\//i.test(raw)) {
+      const u = new URL(raw);
+      tail = u.search + u.hash;
+      abs = fileURLToPath(u.href.slice(0, u.href.length - tail.length));
+    } else {
+      abs = resolve(ROOT, raw);
+    }
+    if (!(abs === ROOT || abs.startsWith(ROOT + sep)) || !existsSync(abs)) {
+      console.error('⛔ 拒绝打开（不在仓库内或文件不存在）:', raw.slice(0, 80));
+      return;
+    }
+    openArg = pathToFileURL(abs).href + tail;
+  } else {
+    console.error('⛔ 拒绝打开（只允许 http/https 与仓库内文件）:', raw.slice(0, 80));
+    return;
+  }
+
+  const cmd = process.platform === 'darwin' ? 'open'
+    : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+  execFile(cmd, process.platform === 'win32' ? ['/c', 'start', '', openArg] : [openArg],
+    err => { if (err) console.error('打开失败:', err.message); });
 }
 
 // ---------- 地图：生成静态页面后打开本地文件 ----------
@@ -44,7 +78,7 @@ const MAP_OUT_PATH = join(ROOT, 'data', 'map.html');
 // 每次调用都重新生成，保证打开的是最新的报告数据；?house= 深链由页面自己解析。
 function openMapForHouse(house, notify = () => {}) {
   notify(house ? `🗺️ 正在生成地图并定位 ${house.no} ${house.community}…` : '🗺️ 正在生成房源地图…');
-  exec(`node "${join(ROOT, 'scripts', 'map.mjs')}"`, (err) => {
+  execFile(process.execPath, [join(ROOT, 'scripts', 'map.mjs')], (err) => {
     if (err) {
       notify('❌ 地图生成失败——可手动运行 npm run map 查看');
       return;
