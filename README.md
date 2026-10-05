@@ -51,6 +51,13 @@ Claude Code users can also take it as a plugin instead:
 /plugin install house-ops@ohwald
 ```
 
+Codex reads the same marketplace, so its CLI works too:
+
+```bash
+codex plugin marketplace add ohwald/house-ops
+codex plugin add house-ops@house-ops
+```
+
 Inside this repository the skill is already wired up through `.claude/skills/`, so installing the plugin is only
 needed when you want house-ops in *another* project. Prefer to clone instead?
 
@@ -377,6 +384,13 @@ Claude Code 也可以按插件装：
 ```bash
 /plugin marketplace add ohwald/house-ops
 /plugin install house-ops@ohwald
+```
+
+Codex 读的是同一份市场清单，所以它自己的 CLI 也能装：
+
+```bash
+codex plugin marketplace add ohwald/house-ops
+codex plugin add house-ops@house-ops
 ```
 
 在本仓库里技能已通过 `.claude/skills/` 直接可用，所以只有想在**别的项目**里用 house-ops 时才需要装插件。也可以直接克隆：

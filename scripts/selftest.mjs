@@ -599,6 +599,25 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
           await stat(join(ROOT, entry.source ?? '', '.claude-plugin/plugin.json')).then(() => true).catch(() => false));
       }
     }
+
+    // Codex 插件清单（.codex-plugin/）：形态和 Claude 那份一致，但校验更松——
+    // 实测把版本改成 9.9.9 它照样装、照样对外报 9.9.9，不会报版本不匹配。
+    // 所以这里必须自己把版本号钉住，否则用户装到的版本和 package.json 对不上。
+    // 另：codex 不读自己的 marketplace.json，它复用 .claude-plugin/marketplace.json。
+    const codex = JSON.parse(await readFile(join(ROOT, '.codex-plugin/plugin.json'), 'utf8').catch(() => 'null'));
+    if (codex) {
+      has('codex plugin.json 名字与仓库一致', codex.name === 'house-ops');
+      eq('codex plugin.json 版本与 package.json 一致（单一真源）', codex.version, pkg.version);
+
+      const codexSkillPaths = codex.skills ?? [];
+      has('codex plugin 至少挂一个 skill', codexSkillPaths.length > 0);
+      for (const rel of codexSkillPaths) {
+        has(`codex plugin 挂的 skill 能解析到 SKILL.md：${rel}`,
+          await stat(join(ROOT, rel, 'SKILL.md')).then(() => true).catch(() => false));
+      }
+      has('codex 与 claude 两份清单挂同一份 skill（避免两处各挂一份）',
+        JSON.stringify([...codexSkillPaths].sort()) === JSON.stringify([...skillPaths].sort()));
+    }
   }
 }
 
