@@ -1,0 +1,24 @@
+{
+  "name": "house-ops",
+  "version": "0.3.0",
+  "description": "The house-ops marketplace: one plugin, the house-hunting decision workspace. / house-ops 市场：只有一个插件，就是这套购房决策操作台。",
+  "owner": {
+    "name": "ohwald",
+    "url": "https://github.com/ohwald"
+  },
+  "plugins": [
+    {
+      "name": "house-ops",
+      "source": "./",
+      "description": "Scan listings, verify every number, score against your needs — inside your coding agent. 在编码 agent 里找房、验证、打分。",
+      "version": "0.3.0",
+      "category": "productivity",
+      "keywords": [
+        "real-estate",
+        "house-hunting",
+        "decision-support",
+        "购房"
+      ]
+    }
+  ]
+}

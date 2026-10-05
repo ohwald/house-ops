@@ -30,6 +30,8 @@ All scripts run on Node ≥ 18 built-ins only. Don't add runtime dependencies to
 
 The one exception has a cost: ink's dependency chain needs Node ≥ 20, so `npm run dashboard` is Node ≥ 20 only (CI asserts this on Node 18). Keep every other script Node-18-clean. / 唯一例外出在 dashboard：ink 依赖链要 Node ≥20，因此 TUI 仅支持 Node ≥20（CI 在 Node 18 上断言它会明确报错退出），其余脚本必须保持 Node 18 可跑。
 
+**Bumping the version touches three files at once**: `package.json`, `.claude-plugin/plugin.json`, and the plugin entry's `version` in `.claude-plugin/marketplace.json`. `npm run selftest` fails if they drift. / **改版本要同时动三处**：`package.json`、`.claude-plugin/plugin.json` 和 `.claude-plugin/marketplace.json` 里该插件条目的 `version`；漂移会被 `npm run selftest` 拦下。
+
 ## Commit messages | 提交信息
 
 **English [Conventional Commits](https://www.conventionalcommits.org/), always** — this keeps history readable for an international audience:
