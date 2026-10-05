@@ -313,11 +313,14 @@ list, and `node scripts/doctor.mjs` reports which markets are registered.
 A supplementary view for when you want to see everything spatially. Everything here is optional — the terminal flow above is complete without it.
 
 ```bash
-node scripts/map.mjs                 # write a static map page to data/map.html
-node scripts/map.mjs --serve [port]  # also start a local service (default 3000, auto-increments if busy) with profile editing
+node scripts/map.mjs                 # write a single-file static map page to data/map.html
 node scripts/map.mjs --out <file>    # custom output path
-# npm run map / npm run map:serve
+# npm run map
 ```
+
+Open `data/map.html` in a browser — that's it. The page is **fully static**: data is inlined into the
+HTML, no local server is started, no port is opened, and nothing writes back into the repo. Want to change
+your buyer profile? Export the YAML from the page and hand it to your agent to write into `config/profile.yml`.
 
 Coordinates, commute rings, decision filters, a detail panel and a compare matrix. Repo empty? It ships with fictional demo data — toggle ✨ 演示数据 in the UI. From the TUI, `Enter` on a property deep-links straight to it.
 
@@ -628,11 +631,14 @@ node scripts/scan.mjs official --market apac  # 另有 18 条，覆盖 hk / sg /
 纯粹的空间辅助视图，想看分布时再用；上面的终端流程不依赖它。
 
 ```bash
-node scripts/map.mjs                 # 生成静态页面 data/map.html
-node scripts/map.mjs --serve [port]  # 同时启动本地服务（默认 3000，端口占用则自动 +1）并支持保存画像
+node scripts/map.mjs                 # 生成单文件静态页面 data/map.html
 node scripts/map.mjs --out <file>    # 自定义输出路径
-# npm run map / npm run map:serve
+# npm run map
 ```
+
+用浏览器直接打开 `data/map.html` 即可。页面是**纯静态的**：数据内联在 HTML 里，不启动本地服务、
+不开放端口，也不会往仓库里写任何文件。要修改需求画像，在页面导出 YAML 后交给你的 agent 写回
+`config/profile.yml`。
 
 支持坐标上图、通勤圈、决策筛选、详情卡与对比矩阵。仓库为空时自带虚构演示数据，UI 里 ✨ 演示数据 可切换；在 TUI 里按 `Enter` 会深链定位到选中房源。
 

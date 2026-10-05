@@ -7,9 +7,8 @@ import { DEMO_HOUSES } from './map-demo.mjs';
 import { PAGE_SCRIPT } from './map-page.mjs';
 import { PROFILE_FIELDS } from './profile.mjs';
 
-export function renderMapHtml({ initialData, config = {} }) {
+export function renderMapHtml({ initialData }) {
   const jsonString = JSON.stringify(initialData).replace(/</g, '\\u003c');
-  const serverMode = Boolean(config.serverMode);
   const DEMO_JSON = JSON.stringify(DEMO_HOUSES).replace(/</g, '\\u003c');
   const PROFILE_FIELDS_JSON = JSON.stringify(PROFILE_FIELDS);
 
@@ -403,7 +402,8 @@ export function renderMapHtml({ initialData, config = {} }) {
     </div>
     <div class="drawer-body">
       <div style="background:rgba(56, 189, 248, 0.1); border:1px solid rgba(56, 189, 248, 0.2); padding:10px 12px; border-radius:8px; font-size:0.8rem; color:#bae6fd;">
-        💡 修改后点击保存将直接同步写入 <code>config/profile.yml</code>，后续运行 CLI 命令将自动采用新画像。
+        💡 页面只读。保存会导出一份 <code>profile.yml</code>，由你（或你的 agent）写回 <code>config/profile.yml</code>。
+         地图不启动任何本地服务，也不会自己改动仓库里的文件。
       </div>
 
       <div class="form-group">
@@ -478,7 +478,6 @@ export function renderMapHtml({ initialData, config = {} }) {
   <!-- 数据注入与客户端逻辑脚本 -->
   <script>
     const INITIAL_DATA = ${jsonString};
-    const IS_SERVER_MODE = ${serverMode};
     const DEMO_HOUSES = ${DEMO_JSON}
     const PROFILE_FIELDS = ${PROFILE_FIELDS_JSON};
 ${PAGE_SCRIPT}
