@@ -28,6 +28,8 @@ node scripts/map.mjs --out /tmp/demo.html   # smoke-check changes to the page ge
 
 All scripts run on Node ≥ 18 built-ins only. Don't add runtime dependencies to the script layer; the dashboard's `ink`/`react` is the sole exception. / 脚本层只用 Node ≥18 内置模块，不要引入运行时依赖；`ink`/`react` 仅限 dashboard。
 
+The one exception has a cost: ink's dependency chain needs Node ≥ 20, so `npm run dashboard` is Node ≥ 20 only (CI asserts this on Node 18). Keep every other script Node-18-clean. / 唯一例外出在 dashboard：ink 依赖链要 Node ≥20，因此 TUI 仅支持 Node ≥20（CI 在 Node 18 上断言它会明确报错退出），其余脚本必须保持 Node 18 可跑。
+
 ## Commit messages | 提交信息
 
 **English [Conventional Commits](https://www.conventionalcommits.org/), always** — this keeps history readable for an international audience:

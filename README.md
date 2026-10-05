@@ -201,7 +201,7 @@ npm run selftest                 # golden tests should pass
 npm run dashboard                # open the TUI console to read reports
 ```
 
-Requirements: **Node ≥ 18**. Core scripts use built-ins only; `ink` + `react` are pulled in solely for the TUI dashboard.
+Requirements: **Node ≥ 18** for every script; the TUI dashboard additionally needs **Node ≥ 20** (ink's dependency chain uses the RegExp `v` flag). Core scripts use built-ins only; `ink` + `react` are pulled in solely for the TUI dashboard. On Node 18 the dashboard exits with a readable message instead of a stack trace.
 
 ## Authenticity: why this isn't just "ask an AI about a listing"
 
