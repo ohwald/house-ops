@@ -59,11 +59,25 @@ jobs:
           grep -q 'const INITIAL_DATA' /tmp/map.html
           echo 'Map page generated OK'
 
-      - name: Dashboard smoke (non-TTY renders one frame and exits)
+      # ink's dependency chain (string-width) uses the RegExp v flag — Node 18 can't even parse it,
+      # so the TUI is Node ≥20 only while every other script stays Node ≥18.
+      - name: Dashboard smoke — render one frame and exit
+        if: matrix.node != 18
         run: |
           timeout 60s node scripts/dashboard.mjs < /dev/null > /tmp/dashboard.txt
           grep -q 'house-ops' /tmp/dashboard.txt
           echo 'Dashboard rendered OK'
+
+      - name: Dashboard smoke — must refuse clearly on Node 18
+        if: matrix.node == 18
+        run: |
+          set +e
+          timeout 60s node scripts/dashboard.mjs < /dev/null > /tmp/dashboard.txt 2>&1
+          code=$?
+          set -e
+          test "$code" -ne 0
+          grep -q 'Node' /tmp/dashboard.txt
+          echo "Dashboard refused on Node 18 with a readable message (exit $code)"
 
       - name: Report numbers are atomic under concurrency
         run: |

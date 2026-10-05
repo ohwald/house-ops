@@ -27,6 +27,13 @@ const REPO_ONLY_FILES = new Set(['CLAUDE.md', 'README.md', 'config/profile.examp
 // 不是故障——降为建议并说明后果，否则装完跑 doctor 会白得一个 ⛔。
 const SOFT_FILES_IN_PACKAGE = new Set(['AGENTS.md']);
 
+// 0. 运行时版本：核心脚本 Node ≥18 即可，TUI 因为 ink 依赖链（string-width 用 RegExp v flag）要 ≥20
+{
+  const major = Number(process.versions.node.split('.')[0]);
+  check(major >= 18 ? 'pass' : 'fail', `Node ${process.versions.node}`,
+    major >= 18 ? (major < 20 ? '核心脚本可用；dashboard（TUI）需要 ≥20' : '') : '低于最低要求 Node 18');
+}
+
 // 1. 系统层完整性
 const sysFiles = [
   'AGENTS.md', 'CLAUDE.md', 'README.md',

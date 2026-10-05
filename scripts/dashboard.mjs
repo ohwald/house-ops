@@ -12,9 +12,19 @@
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn } from 'node:child_process';
-import React, { useState, useEffect } from 'react';
-import { render, Text, Box, Static, useInput, useApp } from 'ink';
 import { collectReports, parseWatchlist, readReportDetail, num } from './lib/data.mjs';
+
+// ink 的依赖链（string-width）用到了 RegExp 的 v flag，Node 18 上一加载就是 SyntaxError。
+// 所以这里必须动态 import：静态 import 会在版本检查之前就把进程炸掉，用户只看到一段看不懂的堆栈。
+if (Number(process.versions.node.split('.')[0]) < 20) {
+  console.error(`⛔ dashboard 需要 Node ≥ 20，当前是 ${process.versions.node}。`);
+  console.error('   ink 的依赖链用了 Node 20 才支持的正则特性（RegExp v flag）。');
+  console.error('   核心脚本（scan / doctor / selftest / stats / map）在 Node 18 上照常可用，只有这个 TUI 不行。');
+  process.exit(1);
+}
+const React = (await import('react')).default;
+const { useState, useEffect } = React;
+const { render, Text, Box, Static, useInput, useApp } = await import('ink');
 import { conclusionLabel, riskLabel } from './lib/decision.mjs';
 
 const h = React.createElement;
