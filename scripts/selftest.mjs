@@ -6,6 +6,7 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFile, stat, lstat, realpath } from 'node:fs/promises';
 import {
   finalizeRecord, SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, VERDICT_THRESHOLDS,
   SCAN_STATUS, SCAN_BUDGET, SOURCE_GRANULARITIES,
@@ -534,6 +535,44 @@ const matrix = [
 for (const [url, want] of matrix) eq(`detect ${url.slice(8, 48)}`, detectOne(url), want);
 eq('liftMobileCity（m 子域城市提升）', liftMobileCity('m', 'sh/ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
 eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
+
+// ---------- 仓库卫生：文档命令不漂移 / skill 镜像软链完整 ----------
+// 只在「仓库形态」下断言：打包产物里没有 README.md 也没有 .agents/，自动跳过。
+
+{
+  const readme = await readFile(join(ROOT, 'README.md'), 'utf8').catch(() => null);
+  if (readme) {
+    const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
+    const npmCmds = [...new Set([...readme.matchAll(/npm run ([a-z][a-z0-9:-]*)/g)].map((m) => m[1]))];
+    has('README 确实引用了 npm script（防止正则失效静默跳过）', npmCmds.length > 0);
+    eq('README 引用的 npm script 都存在', npmCmds.filter((c) => !(c in pkg.scripts)), []);
+
+    const paths = [...new Set([...readme.matchAll(/node ((?:scripts|tools)\/[A-Za-z0-9_\-./]+\.mjs)/g)].map((m) => m[1]))];
+    has('README 确实引用了脚本路径（防止正则失效静默跳过）', paths.length > 0);
+    const missing = [];
+    for (const rel of paths) {
+      if (!(await stat(join(ROOT, rel)).then(() => true).catch(() => false))) missing.push(rel);
+    }
+    eq('README 引用的脚本路径都存在', missing, []);
+  }
+
+  const skillDir = join(ROOT, '.agents/skills/house-ops');
+  if (await stat(join(skillDir, 'SKILL.md')).then(() => true).catch(() => false)) {
+    // 镜像集合 = 运行时真读到的东西；多链一个就把无关产物推给所有用户
+    const required = ['modes', 'scripts', 'scrapers', 'templates', 'config', 'data', 'reports', 'docs/markets', 'package.json'];
+    const missing = [], broken = [];
+    for (const rel of required) {
+      const st = await lstat(join(skillDir, rel)).catch(() => null);
+      if (!st) { missing.push(rel); continue; }
+      if (st.isSymbolicLink() && !(await realpath(join(skillDir, rel)).catch(() => null))) broken.push(rel);
+    }
+    eq('skill 镜像条目齐全（运行时真读到的目录）', missing, []);
+    eq('skill 镜像软链都能解析到实体', broken, []);
+    // AGENTS.md 一旦镜像进技能目录，根目录判定会把 PROJECT_ROOT 拽到技能目录里
+    const leaked = await stat(join(skillDir, 'AGENTS.md')).then(() => true).catch(() => false);
+    has('AGENTS.md 未镜像进技能目录（防 PROJECT_ROOT 掉进去）', leaked === false);
+  }
+}
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
 process.exit(failed ? 1 : 0);
