@@ -7,6 +7,9 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile, stat, lstat, realpath } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { networkInterfaces } from 'node:os';
+import net from 'node:net';
 import {
   finalizeRecord, SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, VERDICT_THRESHOLDS,
   SCAN_STATUS, SCAN_BUDGET, SOURCE_GRANULARITIES,
@@ -618,6 +621,73 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
       has('codex 与 claude 两份清单挂同一份 skill（避免两处各挂一份）',
         JSON.stringify([...codexSkillPaths].sort()) === JSON.stringify([...skillPaths].sort()));
     }
+  }
+}
+
+// 地图服务（scripts/map.mjs --serve）的默认暴露面。
+// ClawHub 的安全审核点名过：服务绑所有网卡，且 POST /api/profile 无鉴权就能改写 config/profile.yml。
+// 现在默认只绑 127.0.0.1、写接口要一次性 token，这里把这两条钉成回归断言——
+// 只发「无 token」的 POST（期望 401），所以不会真的写到 profile.yml。
+await mapServerExposure();
+
+async function mapServerExposure() {
+  const child = spawn(process.execPath, ['scripts/map.mjs', '--serve', '38765'], {
+    cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let log = '';
+  child.stdout.on('data', (d) => { log += d; });
+  child.stderr.on('data', (d) => { log += d; });
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const started = Date.now();
+  let port = null;
+  // 端口被占用时服务会自动 +1，所以从启动输出里取真实端口
+  while (Date.now() - started < 20000 && port === null) {
+    port = Number((log.match(/http:\/\/localhost:(\d+)/) ?? [])[1] ?? NaN) || null;
+    if (port === null) await sleep(300);
+  }
+
+  if (port === null) {
+    has('地图服务能启动（超时则视为失败）', false);
+    child.kill();
+    return;
+  }
+
+  try {
+    const page = await fetch(`http://127.0.0.1:${port}/`).then((r) => r.status).catch(() => 0);
+    has('地图服务页面可访问 (GET /)', page === 200);
+
+    const noToken = await fetch(`http://127.0.0.1:${port}/api/profile`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patch: { buyer: { work_location: 'x' } } }),
+    }).then((r) => r.status).catch(() => 0);
+    has('写接口无 token 一律拒绝 (POST /api/profile → 401)', noToken === 401);
+
+    const crossOrigin = await fetch(`http://127.0.0.1:${port}/api/profile`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' },
+    }).then((r) => r.status).catch(() => 0);
+    has('跨域预检被拒（不再 Access-Control-Allow-Origin: *）', crossOrigin === 403);
+
+    // 找一个非回环 IPv4，验证服务没绑在上面
+    let lanIp = null;
+    for (const list of Object.values(networkInterfaces())) {
+      for (const i of list ?? []) {
+        if (i.family === 'IPv4' && !i.internal) { lanIp = i.address; break; }
+      }
+      if (lanIp) break;
+    }
+    if (lanIp) {
+      const reachable = await new Promise((resolve) => {
+        const s = net.connect({ host: lanIp, port });
+        s.on('connect', () => { s.destroy(); resolve(true); });
+        s.on('error', () => resolve(false));
+        setTimeout(() => resolve(false), 2000);
+      });
+      has(`默认只绑回环：${lanIp} 连不上`, reachable === false);
+    }
+  } finally {
+    child.kill();
   }
 }
 

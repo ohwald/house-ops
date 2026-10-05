@@ -118,7 +118,7 @@
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
 | `scripts/lib/data.mjs` | stats/dashboard/map 共享数据解析层（报告/watchlist） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
-| `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件 HTML `data/map.html` 或启动 `--serve` 本地服务，支持高德地图、通勤圈、筛选与画像保存；零外部依赖） |
+| `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件 HTML `data/map.html` 或启动 `--serve` 本地服务，支持高德地图、通勤圈、筛选与画像保存；零外部依赖。服务默认只监听 `127.0.0.1`，写接口需本次启动的一次性 token；要手机/局域网访问才加 `--host 0.0.0.0`，此时会打印暴露警告） |
 
 ## First Run — Onboarding
 

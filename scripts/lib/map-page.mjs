@@ -698,7 +698,10 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         if (IS_SERVER_MODE) {
           const res = await fetch('/api/profile', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-House-Ops-Token': typeof WRITE_TOKEN === 'string' ? WRITE_TOKEN : ''
+            },
             body: JSON.stringify({ patch, rawYaml: document.getElementById('p-raw-yaml').value })
           });
           const data = await res.json();

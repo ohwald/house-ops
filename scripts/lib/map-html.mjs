@@ -10,6 +10,8 @@ import { PROFILE_FIELDS } from './profile.mjs';
 export function renderMapHtml({ initialData, config = {} }) {
   const jsonString = JSON.stringify(initialData).replace(/</g, '\\u003c');
   const serverMode = Boolean(config.serverMode);
+  // 写接口的一次性 token：由 map.mjs 在本次启动时生成并注入，静态模式下为空
+  const writeToken = config.writeToken || '';
   const DEMO_JSON = JSON.stringify(DEMO_HOUSES).replace(/</g, '\\u003c');
   const PROFILE_FIELDS_JSON = JSON.stringify(PROFILE_FIELDS);
 
@@ -479,6 +481,7 @@ export function renderMapHtml({ initialData, config = {} }) {
   <script>
     const INITIAL_DATA = ${jsonString};
     const IS_SERVER_MODE = ${serverMode};
+    const WRITE_TOKEN = ${JSON.stringify(writeToken)};
     const DEMO_HOUSES = ${DEMO_JSON}
     const PROFILE_FIELDS = ${PROFILE_FIELDS_JSON};
 ${PAGE_SCRIPT}

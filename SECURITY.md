@@ -12,7 +12,8 @@ Use GitHub [private security advisories](https://github.com/ohwald/house-ops/sec
 
 - The script layer (`scripts/`, `scrapers/`): path traversal in file inputs, injection via listing data into generated HTML, unsafe dependency changes
 - The generated map page: XSS through listing fields, credential leakage (`AMAP_KEY` is optional and read server-side only)
-- 脚本层与生成页面的上述类别问题（路径穿越、房源数据注入生成 HTML、凭据泄露等）
+- The local map service (`node scripts/map.mjs --serve`): which address it binds, CORS scope, and whether the write endpoints (`POST /api/profile`, `POST /api/geo-cache`) still require the one-off token
+- 脚本层与生成页面的上述类别问题（路径穿越、房源数据注入生成 HTML、凭据泄露等）；本地地图服务的监听地址、CORS 范围与写接口鉴权
 
 ## Out of scope | 不在范围
 

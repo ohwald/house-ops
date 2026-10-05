@@ -315,9 +315,12 @@ A supplementary view for when you want to see everything spatially. Everything h
 ```bash
 node scripts/map.mjs                 # write a static map page to data/map.html
 node scripts/map.mjs --serve [port]  # also start a local service (default 3000, auto-increments if busy) with profile editing
+node scripts/map.mjs --host <addr>   # listen address (default 127.0.0.1 — loopback only)
 node scripts/map.mjs --out <file>    # custom output path
 # npm run map / npm run map:serve
 ```
+
+The service binds **127.0.0.1** and its write endpoints need a one-off token generated at startup, so nothing leaves the machine by default. Adding `--host 0.0.0.0` is supported (phone/LAN access) but prints a warning: everyone on that network can then read your reports and rewrite `config/profile.yml`.
 
 Coordinates, commute rings, decision filters, a detail panel and a compare matrix. Repo empty? It ships with fictional demo data — toggle ✨ 演示数据 in the UI. From the TUI, `Enter` on a property deep-links straight to it.
 
@@ -630,9 +633,13 @@ node scripts/scan.mjs official --market apac  # 另有 18 条，覆盖 hk / sg /
 ```bash
 node scripts/map.mjs                 # 生成静态页面 data/map.html
 node scripts/map.mjs --serve [port]  # 同时启动本地服务（默认 3000，端口占用则自动 +1）并支持保存画像
+node scripts/map.mjs --host <addr>   # 监听地址（默认 127.0.0.1，仅本机可达）
 node scripts/map.mjs --out <file>    # 自定义输出路径
 # npm run map / npm run map:serve
 ```
+
+服务默认**只监听 127.0.0.1**，写接口需要本次启动生成的一次性 token，默认不出本机。
+`--host 0.0.0.0` 可以给手机/局域网访问，但会打印警告：此时同一网络内的任何人都能读你的报告、改写 `config/profile.yml`。
 
 支持坐标上图、通勤圈、决策筛选、详情卡与对比矩阵。仓库为空时自带虚构演示数据，UI 里 ✨ 演示数据 可切换；在 TUI 里按 `Enter` 会深链定位到选中房源。
 
