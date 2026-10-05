@@ -30,7 +30,9 @@ All scripts run on Node ≥ 18 built-ins only. Don't add runtime dependencies to
 
 The one exception has a cost: ink's dependency chain needs Node ≥ 20, so `npm run dashboard` is Node ≥ 20 only (CI asserts this on Node 18). Keep every other script Node-18-clean. / 唯一例外出在 dashboard：ink 依赖链要 Node ≥20，因此 TUI 仅支持 Node ≥20（CI 在 Node 18 上断言它会明确报错退出），其余脚本必须保持 Node 18 可跑。
 
-**Bumping the version touches three files at once**: `package.json`, `.claude-plugin/plugin.json`, and the plugin entry's `version` in `.claude-plugin/marketplace.json`. `npm run selftest` fails if they drift. / **改版本要同时动三处**：`package.json`、`.claude-plugin/plugin.json` 和 `.claude-plugin/marketplace.json` 里该插件条目的 `version`；漂移会被 `npm run selftest` 拦下。
+**Bumping the version touches four files at once**: `package.json`, `.claude-plugin/plugin.json`, the plugin entry's `version` in `.claude-plugin/marketplace.json`, and `.codex-plugin/plugin.json`. `npm run selftest` fails if they drift. / **改版本要同时动四处**：`package.json`、`.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json` 里该插件条目的 `version`，以及 `.codex-plugin/plugin.json`；漂移会被 `npm run selftest` 拦下。
+
+Codex has no marketplace file of its own — it reads `.claude-plugin/marketplace.json` and only needs `.codex-plugin/plugin.json`. Unlike Claude, it does **not** cross-check versions: a mismatched `version` is installed and reported as-is, which is exactly why selftest pins it. / Codex 没有自己的市场文件——它读 `.claude-plugin/marketplace.json`，只需一份 `.codex-plugin/plugin.json`。与 Claude 不同，它**不校验版本一致性**：版本写错会照样装、照样对外报，所以必须靠 selftest 钉住。
 
 ## Commit messages | 提交信息
 
