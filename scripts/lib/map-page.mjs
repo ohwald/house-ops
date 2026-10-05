@@ -373,14 +373,14 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
 
         item.innerHTML = \`
           <div class="house-item-top">
-            <div class="score-badge \${scoreClass}">\${h.score_global != null ? h.score_global : '--'}</div>
-            <span class="status-tag \${d.tagCls}">\${d.tag}</span>
+            <div class="score-badge \${esc(scoreClass)}">\${esc(h.score_global ?? '--')}</div>
+            <span class="status-tag \${esc(d.tagCls)}">\${esc(d.tag)}</span>
           </div>
-          <div class="house-item-title">\${h.authenticity === 'suspect' ? '⚠ ' : ''}\${h.report_no || ''} · \${h.community || '房源'}</div>
-          <div class="house-item-sub">\${subBits || '暂无明细'}</div>
+          <div class="house-item-title">\${h.authenticity === 'suspect' ? '⚠ ' : ''}\${esc(h.report_no) || ''} · \${esc(h.community) || '房源'}</div>
+          <div class="house-item-sub">\${esc(subBits) || '暂无明细'}</div>
           <div class="house-item-price">
-            <div><span class="price-num">\${h.total_price_wan != null ? h.total_price_wan : '--'}</span><span class="price-unit">万</span></div>
-            <span class="unit-price">\${h.unit_price ? h.unit_price.toLocaleString() + ' 元/㎡' : ''}</span>
+            <div><span class="price-num">\${esc(h.total_price_wan ?? '--')}</span><span class="price-unit">万</span></div>
+            <span class="unit-price">\${h.unit_price ? esc(h.unit_price.toLocaleString()) + ' 元/㎡' : ''}</span>
           </div>
         \`;
         container.appendChild(item);
@@ -473,11 +473,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     function viewCurrentReport() {
       if (!currentSelectedHouse) return;
       const file = currentSelectedHouse.file;
-      if (IS_SERVER_MODE && file) {
-        window.open('/api/report?file=' + encodeURIComponent(file), '_blank');
-      } else {
-        showToast(file ? '报告文件: reports/' + file + '（npm run map:serve 可直接打开）' : '未找到报告文件名');
-      }
+      showToast(file ? '报告文件: reports/' + file + '（让 agent 打开即可）' : '未找到报告文件名');
     }
 
     function toggleCurrentHouseCompare() {
@@ -516,7 +512,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     }
 
 
-    function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
     function openCompareModal() {
       if (selectedCompareNos.length === 0) {
@@ -695,32 +691,16 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
       });
 
       try {
-        if (IS_SERVER_MODE) {
-          const res = await fetch('/api/profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patch, rawYaml: document.getElementById('p-raw-yaml').value })
-          });
-          const data = await res.json();
-          if (data.ok) {
-            showToast('需求画像已保存到 config/profile.yml');
-            closeProfileDrawer();
-            profile.buyer.work_location = patch.buyer.work_location;
-            profile.buyer.commute_max_minutes = patch.buyer.commute_max_minutes;
-            setupWorkAnchor();
-          } else {
-            alert('保存失败: ' + (data.error || '未知错误'));
-          }
-        } else {
-          showToast('当前为静态模式，请复制配置或使用 CLI 服务模式保存');
-          const blob = new Blob([document.getElementById('p-raw-yaml').value], { type: 'text/yaml' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'profile.yml';
-          a.click();
-          closeProfileDrawer();
-        }
+        // 纯导出：页面不写仓库里的任何文件，由 agent 写回 config/profile.yml
+        showToast('已导出 profile.yml——请把它交回你的 agent 写回 config/profile.yml');
+        const blob = new Blob([document.getElementById('p-raw-yaml').value], { type: 'text/yaml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'profile.yml';
+        a.click();
+        URL.revokeObjectURL(url);
+        closeProfileDrawer();
       } catch (err) {
         alert('保存异常: ' + err.message);
       } finally {
@@ -730,8 +710,8 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     }
 
     // 设置工作地锚点与通勤圈（Screen 01：双等时圈 + 圈缘标签）
-    // 工作锚点由画像驱动：buyer.work_location_coords = [经度, 纬度]（intake 采集时由用户提供，
-    // 或在本地服务模式下写入画像），代码不内置任何真实位置。演示模式使用中性的虚构演示锚点；
+    // 工作锚点由画像驱动：buyer.work_location_coords = [经度, 纬度]，由 intake 采集时用户提供，
+    // 或按需让 agent 写回画像；代码不内置任何真实位置。演示模式使用中性的虚构演示锚点；
     // 未设置锚点时不绘制锚点与通勤圈，并在图层开关上给出引导。
     function workAnchorInfo() {
       if (isUsingDemo) return { coords: [31.2304, 121.4737], label: '公司 · 人民广场（演示）' };

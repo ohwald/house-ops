@@ -3,15 +3,15 @@
 // 用法: node scripts/dashboard.mjs [PROJECT_ROOT]   （或 npm run dashboard）
 // 交互快捷键:
 //   ↑ / ↓ (或 k / j): 上下选择房源
-//   Enter 或 m: 在浏览器中打开房源地图并定位到选定房源（服务未启动时自动后台拉起）
+//   Enter 或 m: 生成地图静态页面并在浏览器中定位到选定房源
 //   i: 查看选定房源的深度评估报告（内嵌滚动视图）
 //   o: 在浏览器中打开挂牌原网页 (若无则打开报告文件)
 //   p: 切换排序 · r: 刷新数据 · q / Esc: 退出程序或返回主列表
 // （交易状态跟踪已移除，见 docs/adr/0001——watchlist 为纯候选清单，备注即事实）
 
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { exec, spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { exec } from 'node:child_process';
 import { collectReports, parseWatchlist, readReportDetail, num } from './lib/data.mjs';
 
 // ink 的依赖链（string-width）用到了 RegExp 的 v flag，Node 18 上一加载就是 SyntaxError。
@@ -37,38 +37,21 @@ function openExternal(target) {
   exec(`${cmd} "${String(target).replace(/"/g, '\\"')}"`);
 }
 
-// ---------- 地图服务：健康检查 + 自动拉起 + 深链 ----------
-const MAP_PORT = 3000;
-async function mapServerHealthy() {
-  try {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 800);
-    const res = await fetch(`http://127.0.0.1:${MAP_PORT}/api/data`, { signal: ctl.signal });
-    clearTimeout(timer);
-    return res.ok;
-  } catch { return false; }
-}
+// ---------- 地图：生成静态页面后打开本地文件 ----------
+const MAP_OUT_PATH = join(ROOT, 'data', 'map.html');
 
-// 若地图服务未运行则后台拉起（detached，不随 TUI 退出），随后打开浏览器深链到具体房源
-async function openMapForHouse(house, notify = () => {}) {
-  notify(house ? `🗺️ 正在地图中定位 ${house.no} ${house.community}…` : '🗺️ 正在打开房源地图…');
-  if (!(await mapServerHealthy())) {
-    notify('🚀 首次使用：正在后台启动地图服务…', 2000);
-    spawn(process.execPath, [join(ROOT, 'scripts', 'map.mjs'), '--serve'], {
-      detached: true, stdio: 'ignore',
-    }).unref();
-    let up = false;
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 400));
-      if (await mapServerHealthy()) { up = true; break; }
-    }
-    if (!up) {
-      notify('❌ 地图服务启动失败——可手动运行 npm run map:serve 查看');
+// 地图是纯静态单文件页面（数据内联在 HTML 里），没有本地服务、没有开放端口。
+// 每次调用都重新生成，保证打开的是最新的报告数据；?house= 深链由页面自己解析。
+function openMapForHouse(house, notify = () => {}) {
+  notify(house ? `🗺️ 正在生成地图并定位 ${house.no} ${house.community}…` : '🗺️ 正在生成房源地图…');
+  exec(`node "${join(ROOT, 'scripts', 'map.mjs')}"`, (err) => {
+    if (err) {
+      notify('❌ 地图生成失败——可手动运行 npm run map 查看');
       return;
     }
-  }
-  const q = house?.no ? `?house=${encodeURIComponent(house.no)}` : '';
-  openExternal(`http://localhost:${MAP_PORT}/${q}`);
+    const q = house?.no ? `?house=${encodeURIComponent(house.no)}` : '';
+    openExternal(pathToFileURL(MAP_OUT_PATH).href + q);
+  });
 }
 
 // ---------- CJK 视觉宽度工具 ----------

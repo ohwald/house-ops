@@ -4,8 +4,9 @@
 
 优先跑脚本（零 token）：
 
-- `npm run map:serve` — 本地服务（推荐）：每次请求重载最新报告数据，画像保存直接写回 `config/profile.yml`
-- `node scripts/map.mjs` — 生成单文件 `data/map.html`（双击即可打开，无需服务）
+- `node scripts/map.mjs`（或 `npm run map`）— 生成单文件静态页面 `data/map.html`，浏览器直接打开，**不启动任何服务**
+- 数据有更新时重新跑一次即可；页面只读，不会自己改动仓库里的文件
+- 改需求画像：在页面导出 YAML → 交给 agent 写回 `config/profile.yml`（写文件是 agent 的活，不是页面的）
 - 深链：`?house=<报告编号>` 自动定位房源并打开详情卡（dashboard 的 Enter/m 键即此入口）
 
 ## 页面交互

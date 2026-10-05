@@ -118,7 +118,7 @@
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
 | `scripts/lib/data.mjs` | stats/dashboard/map 共享数据解析层（报告/watchlist） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
-| `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件 HTML `data/map.html` 或启动 `--serve` 本地服务，支持高德地图、通勤圈、筛选与画像保存；零外部依赖） |
+| `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件静态 HTML `data/map.html`，支持高德地图、通勤圈、筛选与画像导出；页面纯静态，不启动本地服务、不开放端口；零外部依赖） |
 
 ## First Run — Onboarding
 
@@ -143,7 +143,7 @@
 | "帮我看看合同/认购书/补充协议"（+粘贴条款） | `contract` |
 | "我的清单"、"候选列表"、"更新 005 的备注" | `watchlist` |
 | "统计一下"、"我的找房数据"、"失分分析" | `stats` |
-| "在地图上看"、"地图决策"、"房源分布"、"生成地图" | `map`（优先跑 `node scripts/map.mjs --serve` 或 `scripts/map.mjs`） |
+| "在地图上看"、"地图决策"、"房源分布"、"生成地图" | `map`（优先跑 `node scripts/map.mjs`，生成后用浏览器打开 `data/map.html`） |
 | "自检/体检"、"哪里配置有问题" | `doctor` |
 | `/house-ops` 无参数或"你能做什么" | 显示 discovery 菜单（见 SKILL.md） |
 | 模糊但包含房源链接或明显房源描述 | 默认 `evaluate`，先说明将执行的流程 |

@@ -621,5 +621,82 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   }
 }
 
+// ---------- 地图：静态化 + HTML 注入防回归 ----------
+// ClawHub 的 AI-Infra-Guard 扫描（T09）提过两条：无鉴权的本地服务、房源字段存储型 HTML 注入。
+// 这组断言把修复钉死——任何一处被改回去，selftest 立刻失败。
+{
+  const mapSrc = await readFile(join(ROOT, 'scripts', 'map.mjs'), 'utf8');
+  has('地图不起本地服务（无 createServer）', !/createServer/.test(mapSrc));
+  has('地图不监听任何端口（无 .listen）', !/\.listen\s*\(/.test(mapSrc));
+  has('地图不暴露 HTTP 路由（无 /api/）', !/['"`]\/api\//.test(mapSrc));
+  has('地图不设 CORS 标头', !/Access-Control-Allow-Origin/.test(mapSrc));
+  has('地图不写画像（无写 config/profile.yml 的代码）', !/writeFile\(\s*PROFILE_PATH/.test(mapSrc));
+
+  const pageSrc = await readFile(join(ROOT, 'scripts', 'lib', 'map-page.mjs'), 'utf8');
+  has('页面不发网络请求（无 fetch）', !/\bfetch\s*\(/.test(pageSrc));
+  has('页面不再区分服务模式（无 IS_SERVER_MODE）', !/IS_SERVER_MODE/.test(pageSrc));
+  has('页面不调用后端接口（无 /api/）', !/['"`]\/api\//.test(pageSrc));
+
+  // esc() 必须连引号一起转义：只转义 &<> 的话，属性上下文（onclick="…"）仍可闭合突破
+  const escLine = pageSrc.split('\n').find(l => l.includes('function esc(s)'));
+  has('页面存在 esc() 转义函数', Boolean(escLine));
+  if (escLine) {
+    const escFn = new Function('s', escLine.slice(escLine.indexOf('{') + 1, escLine.lastIndexOf('}')));
+    eq('esc 转义尖括号', escFn('<img src=x>'), '&lt;img src=x&gt;');
+    eq('esc 转义双引号', escFn('" onclick="alert(1)'), '&quot; onclick=&quot;alert(1)');
+    eq('esc 转义单引号', escFn("' onerror='alert(1)"), '&#39; onerror=&#39;alert(1)');
+    eq('esc 转义与符号', escFn('a & b'), 'a &amp; b');
+  }
+
+  // 房源列表是最容易被塞进外部数据（抓取来的小区名 / 板块名）的地方
+  const lStart = pageSrc.indexOf('function renderHouseList');
+  const lEnd = pageSrc.indexOf('container.appendChild(item)');
+  has('能定位到 renderHouseList 模板', lStart > 0 && lEnd > lStart);
+  if (lStart > 0 && lEnd > lStart) {
+    const block = pageSrc.slice(lStart, lEnd);
+    const interps = [...block.matchAll(/\\\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map(m => m[1]);
+    const dataInterps = interps.filter(e => /\b(h|d)\./.test(e) || /\bsubBits\b/.test(e));
+    has('房源列表模板里确有数据插值（防断言空转）', dataInterps.length > 0);
+    // 逐字段用完整字段名核对（不能用子串，否则 d.tag 会误伤 d.tagCls）。
+    // 规则：插值里出现该字段，就必须有 esc(该字段)；这样以后新增字段忘了转义会被这里挡住。
+    for (const field of ['h.community', 'h.report_no', 'h.score_global', 'h.total_price_wan', 'h.unit_price', 'd.tag', 'd.tagCls', 'subBits']) {
+      const fieldRe = new RegExp(`\\b${field.replace(/\./g, '\\.')}\\b`);
+      const bad = dataInterps.filter(e => fieldRe.test(e) && !e.includes(`esc(${field}`));
+      eq(`房源列表里 ${field} 的插值全部经 esc() 转义`, bad, []);
+    }
+
+    // 静态检查只能证明"写了 esc"，证明不了"真的能挡住"。所以这里真跑一次渲染：
+    // 用源码里真实的 esc() 与真实的模板，喂一份恶意房源数据，看渲染结果里还剩什么标签。
+    // BT = 反引号，用 String.fromCharCode 拼接，避免这段断言自身陷入转义地狱。
+    const BT = String.fromCharCode(96);
+    const escBody = escLine.slice(escLine.indexOf('{') + 1, escLine.lastIndexOf('}'));
+    const escImpl = new Function('s', escBody);
+    const tplStart = pageSrc.indexOf(BT, pageSrc.indexOf('item.innerHTML = ')) + 1;
+    const tplEnd = pageSrc.indexOf('\\' + BT + ';', tplStart);
+    const template = pageSrc.slice(tplStart, tplEnd)
+      .replace(/\\\$/g, '$')
+      .replace(new RegExp('\\\\' + BT, 'g'), BT);
+    has('能还原出房源列表模板（防断言空转）', template.includes('house-item-title'));
+
+    const renderRow = new Function('h', 'd', 'subBits', 'scoreClass', 'esc', 'return ' + BT + template + BT + ';');
+    const rendered = renderRow(
+      {
+        report_no: '001"><script>window.__X=1</script>',
+        community: '云栖里<img src=x onerror=window.__X=1>',
+        authenticity: 'verified',
+        score_global: '4.5" onerror="alert(1)',
+        total_price_wan: '<svg onload=alert(1)>',
+        unit_price: null,
+      },
+      { tag: '<script>alert(1)</script>', tagCls: 'hi" onclick="alert(1)' },
+      '<b>district</b>', 'score-high', escImpl,
+    );
+    const tags = [...rendered.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)/g)].map(m => m[1].toLowerCase());
+    // 模板自带的结构标签只有 div/span；任何出现在之外的标签都来自被注入的数据。
+    eq('恶意房源字段渲染后不产出 DIV/SPAN 之外的标签', [...new Set(tags.filter(t => t !== 'div' && t !== 'span'))], []);
+    has('恶意房源字段渲染后不含 <script / <img', !/<script|<img[\s>]/.test(rendered));
+  }
+}
+
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
 process.exit(failed ? 1 : 0);
