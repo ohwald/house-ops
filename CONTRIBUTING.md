@@ -43,6 +43,36 @@ chore(repo): bump actions to node 22
 - Subject line in English, imperative mood, ≤ 72 chars; the body may be in Chinese for nuance
 - One logical change per commit; CI must pass before push
 
+## Branch policy & merge gate | 分支策略与合并门禁
+
+`main` is protected. Nothing reaches it without passing CI. / `main` 是受保护分支，任何改动都必须先过 CI。
+
+```
+git switch -c feat/your-change
+# … work, commit …
+node tools/install-hooks.mjs     # once: local pre-push guard (blocks `git push origin main`)
+git push -u origin feat/your-change
+gh pr create --fill
+# wait for the ci-gate check → squash merge
+```
+
+What the protection enforces / 保护规则实际挡住了什么：
+
+- **No direct push** to `main` — not even for the repository owner (admins included). / 不允许直接推送，包括仓库所有者。
+- **No force push, no deletion** of `main`. / 不允许强推与删除。
+- **Merge requires `ci-gate` to be green.** That is the single required check — it aggregates everything else, so adding a job to CI doesn't require touching the branch settings. / 合并要求 `ci-gate` 通过；它是唯一的必需检查项，汇总其余所有 job，因此增删 job 不需要改分支保护配置。
+- **Squash merge only** (merge commits and rebase merging are disabled); head branches are deleted after merge. / 只允许 squash 合并，合并后自动删除分支。
+
+What `ci-gate` aggregates / `ci-gate` 汇总了什么（`.github/workflows/ci.yml`）：
+
+| Job | Covers |
+|---|---|
+| `verify` × Node 18/20/22 | `node --check` on every module, `doctor`, `selftest`, CLI smoke (stats / official sources), map page + dashboard render, concurrent report-number allocation must stay unique |
+| `privacy-guard` | no user-layer file (`config/profile.yml`, `data/`, `reports/`, `modes/_*.md`) is tracked |
+| `package-gate` | the packaged skill folder must pass `doctor` + `selftest` **standalone** and carry zero user data — this is what `npx skills add` / `clawhub install` actually ship |
+
+Emergency bypass / 紧急绕过（rare, owner only / 罕见，仅所有者）：GitHub → Settings → Rules → disable the ruleset, or `HOUSE_OPS_ALLOW_MAIN_PUSH=1 git push …` for the local hook. Turn it back on immediately after. / 用完立即恢复。
+
 ## Pull requests | PR
 
 - Small and focused beats large and sweeping / 小而聚焦优先
