@@ -24,6 +24,13 @@ surface to get wrong.
 `house-ops` 不开放任何端口，也不启动后台服务。`npm run map` 只生成一份自包含 HTML 文件，你直接双击打开，
 它除渲染地图瓦片外不会替你发起任何网络请求。仓库内没有任何进程接受入站连接，因此也不存在需要正确处理的鉴权面。
 
+Listing URLs are untrusted data, and the TUI does hand them to your system opener. It does so with
+`execFile` and an argument array — never by building a shell string — and only for `http(s)` targets or
+files that resolve inside the repo. Anything else is refused.
+
+房源链接属于不可信数据，TUI 确实会把它交给系统默认程序打开——但用的是 `execFile` 传参数数组，
+而不是拼 shell 字符串；且只放行 `http(s)` 目标与解析后仍落在仓库内的文件，其余一律拒绝。
+
 ## Out of scope | 不在范围
 
 - The coding agent itself (report upstream), prompt-injection *content* inside listing pages — the system already treats listing content as untrusted data, never as instructions; new bypasses of that discipline are in scope though
