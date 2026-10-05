@@ -572,6 +572,34 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
     const leaked = await stat(join(skillDir, 'AGENTS.md')).then(() => true).catch(() => false);
     has('AGENTS.md 未镜像进技能目录（防 PROJECT_ROOT 掉进去）', leaked === false);
   }
+
+  // Claude Code 插件清单：仓库根就是 plugin root（.claude-plugin/ 在那儿），
+  // marketplace 与 plugin 的版本必须同 package.json 一致 —— 三个版本号一旦漂移，
+  // 用户装到的版本就和仓库对不上。分发副本里没有 .claude-plugin/，自动跳过。
+  const plugin = JSON.parse(await readFile(join(ROOT, '.claude-plugin/plugin.json'), 'utf8').catch(() => 'null'));
+  if (plugin) {
+    const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
+    has('plugin.json 名字与仓库一致', plugin.name === 'house-ops');
+    eq('plugin.json 版本与 package.json 一致（单一真源）', plugin.version, pkg.version);
+
+    const skillPaths = plugin.skills ?? [];
+    has('plugin 至少挂一个 skill', skillPaths.length > 0);
+    for (const rel of skillPaths) {
+      has(`plugin 挂的 skill 能解析到 SKILL.md：${rel}`,
+        await stat(join(ROOT, rel, 'SKILL.md')).then(() => true).catch(() => false));
+    }
+
+    const market = JSON.parse(await readFile(join(ROOT, '.claude-plugin/marketplace.json'), 'utf8').catch(() => 'null'));
+    if (market) {
+      const entry = (market.plugins ?? []).find((p) => p.name === plugin.name);
+      has('marketplace 里有同名的 plugin 条目', !!entry);
+      if (entry) {
+        eq('marketplace 条目版本与 plugin.json 一致', entry.version, plugin.version);
+        has('marketplace 条目 source 指向 plugin 根',
+          await stat(join(ROOT, entry.source ?? '', '.claude-plugin/plugin.json')).then(() => true).catch(() => false));
+      }
+    }
+  }
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');

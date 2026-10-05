@@ -42,7 +42,17 @@ For the OpenClaw crowd there is a reviewed listing on ClawHub:
 clawhub install house-ops
 ```
 
-Or browse it first: [clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops). Prefer to clone instead?
+Or browse it first: [clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops).
+
+Claude Code users can also take it as a plugin instead:
+
+```bash
+/plugin marketplace add ohwald/house-ops
+/plugin install house-ops@ohwald
+```
+
+Inside this repository the skill is already wired up through `.claude/skills/`, so installing the plugin is only
+needed when you want house-ops in *another* project. Prefer to clone instead?
 
 ```bash
 git clone https://github.com/ohwald/house-ops.git && cd house-ops
@@ -360,7 +370,16 @@ OpenClaw 用户可以直接装 ClawHub 上经过审核的条目：
 clawhub install house-ops
 ```
 
-详情页：[clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops)。也可以直接克隆：
+详情页：[clawhub.ai/ohwald/skills/house-ops](https://clawhub.ai/ohwald/skills/house-ops)。
+
+Claude Code 也可以按插件装：
+
+```bash
+/plugin marketplace add ohwald/house-ops
+/plugin install house-ops@ohwald
+```
+
+在本仓库里技能已通过 `.claude/skills/` 直接可用，所以只有想在**别的项目**里用 house-ops 时才需要装插件。也可以直接克隆：
 
 ```bash
 git clone https://github.com/ohwald/house-ops.git && cd house-ops
