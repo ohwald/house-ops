@@ -541,9 +541,9 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         const d = h.decision;
         const scoreClass = d.markerCls === 'low' ? 'score-low' : d.markerCls === 'high' ? 'score-high' : 'score-mid';
         thead += \`<th class="\${h === cheapest ? 'best' : ''}">
-          <div class="th-name">\${h.report_no} · \${esc(h.community)}</div>
-          <div class="th-meta">\${h.total_price_wan != null ? h.total_price_wan + ' 万' : '--'} · \${esc(h.district || '')}</div>
-          <div style="margin-top:5px;"><span class="score-badge \${scoreClass}">\${h.score_global != null ? h.score_global : '--'}</span></div>
+          <div class="th-name">\${esc(h.report_no)} · \${esc(h.community)}</div>
+          <div class="th-meta">\${h.total_price_wan != null ? esc(h.total_price_wan) + ' 万' : '--'} · \${esc(h.district || '')}</div>
+          <div style="margin-top:5px;"><span class="score-badge \${esc(scoreClass)}">\${esc(h.score_global ?? '--')}</span></div>
         </th>\`;
       });
       thead += '</tr></thead>';
@@ -559,10 +559,10 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
       };
 
       const rows = [
-        { label: '总价', cells: h => \`<strong>\${h.total_price_wan != null ? h.total_price_wan + ' 万' : '--'}</strong>\${h === cheapest ? '<div class="best-flag">最低总价</div>' : ''}<small>预估税费 \${h.policy_tax_wan ? h.policy_tax_wan + ' 万' : '待精算'}</small>\` },
-        { label: '单价', cells: h => (h.unit_price ? h.unit_price.toLocaleString() + ' 元/㎡' : '待核') },
-        { label: '面积 · 类型', cells: h => \`\${h.area_sqm ? h.area_sqm + '㎡' : '--'} · \${esc(h.type || '住宅')}\` },
-        { label: '房龄', cells: h => (h.built_year ? h.built_year + ' 年' : '待核') },
+        { label: '总价', cells: h => \`<strong>\${h.total_price_wan != null ? esc(h.total_price_wan) + ' 万' : '--'}</strong>\${h === cheapest ? '<div class="best-flag">最低总价</div>' : ''}<small>预估税费 \${h.policy_tax_wan ? esc(h.policy_tax_wan) + ' 万' : '待精算'}</small>\` },
+        { label: '单价', cells: h => (h.unit_price ? esc(h.unit_price.toLocaleString()) + ' 元/㎡' : '待核') },
+        { label: '面积 · 类型', cells: h => \`\${h.area_sqm ? esc(h.area_sqm) + '㎡' : '--'} · \${esc(h.type || '住宅')}\` },
+        { label: '房龄', cells: h => (h.built_year ? esc(h.built_year) + ' 年' : '待核') },
         { label: '政策限制', cells: h => \`<small style="display:block;">\${esc(h.policy_lock_risk || '满五唯一待核实')}</small>\` },
         { label: '成交走势', cells: h => \`<small style="display:block;">\${esc(h.market_trend_text || '筑底企稳')}</small><small>\${esc(h.discount_space_text || '')}</small>\` },
         { label: '规划变量', cells: h => \`<small style="display:block;">\${esc(h.urban_planning_text || '成熟现状')}</small>\` },
@@ -571,7 +571,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
           label: '结论',
           cells: h => {
             const d = h.decision;
-            return \`<span class="status-tag \${d.tagCls}">\${d.tag}</span>\${noteShort(h) ? '<small>' + esc(noteShort(h)) + '</small>' : ''}\`;
+            return \`<span class="status-tag \${esc(d.tagCls)}">\${esc(d.tag)}</span>\${noteShort(h) ? '<small>' + esc(noteShort(h)) + '</small>' : ''}\`;
           }
         }
       ];
@@ -594,9 +594,16 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
     function renderCompareFooterChips(list) {
       const wrap = document.getElementById('compare-footer-chips');
       if (!wrap) return;
+      // 不把编号拼进内联 onclick：属性值里的 HTML 实体会在 JS 求值前被还原，
+      // 所以 esc() 挡不住 JS 字符串上下文。改用 data 属性 + 事件绑定。
       wrap.innerHTML = list.map(h =>
-        \`<span class="compare-chip">\${h.report_no} \${esc(h.community)}<span class="compare-chip-del" onclick="toggleCompareItem('\${h.report_no}'); openCompareModal();">✕</span></span>\`
-      ).join('') + '<span class="compare-chip" style="border-style:dashed; color:var(--text-tertiary); cursor:pointer;" onclick="closeCompareModal()">+ 添加</span>';
+        \`<span class="compare-chip">\${esc(h.report_no)} \${esc(h.community)}<span class="compare-chip-del" data-remove-no="\${esc(h.report_no)}">✕</span></span>\`
+      ).join('') + '<span class="compare-chip" style="border-style:dashed; color:var(--text-tertiary); cursor:pointer;" data-compare-close="1">+ 添加</span>';
+      wrap.querySelectorAll('[data-remove-no]').forEach(el => {
+        el.onclick = () => { toggleCompareItem(el.dataset.removeNo); openCompareModal(); };
+      });
+      const addEl = wrap.querySelector('[data-compare-close]');
+      if (addEl) addEl.onclick = () => closeCompareModal();
     }
 
     function exportCompareConclusion() {
@@ -861,9 +868,9 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         const d = h.decision;
         const isSelected = Boolean(currentSelectedHouse && currentSelectedHouse.report_no === h.report_no);
         const scoreTxt = h.score_global != null ? h.score_global : '--';
-        let html = \`<div class="marker-dot \${d.markerCls}\${h.authenticity === 'suspect' ? ' suspect' : ''}\${isSelected ? ' selected' : ''}">\${scoreTxt}</div>\`;
+        let html = \`<div class="marker-dot \${esc(d.markerCls)}\${h.authenticity === 'suspect' ? ' suspect' : ''}\${isSelected ? ' selected' : ''}">\${esc(scoreTxt)}</div>\`;
         if (isSelected) {
-          html = \`<div class="marker-label">\${h.community || ''} · \${h.total_price_wan != null ? h.total_price_wan + '万' : '--'}</div>\` + html;
+          html = \`<div class="marker-label">\${esc(h.community) || ''} · \${h.total_price_wan != null ? esc(h.total_price_wan) + '万' : '--'}</div>\` + html;
         }
         const icon = L.divIcon({
           html,

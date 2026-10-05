@@ -648,23 +648,31 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
     eq('esc 转义与符号', escFn('a & b'), 'a &amp; b');
   }
 
-  // 房源列表是最容易被塞进外部数据（抓取来的小区名 / 板块名）的地方
-  const lStart = pageSrc.indexOf('function renderHouseList');
-  const lEnd = pageSrc.indexOf('container.appendChild(item)');
-  has('能定位到 renderHouseList 模板', lStart > 0 && lEnd > lStart);
-  if (lStart > 0 && lEnd > lStart) {
-    const block = pageSrc.slice(lStart, lEnd);
-    const interps = [...block.matchAll(/\\\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map(m => m[1]);
-    const dataInterps = interps.filter(e => /\b(h|d)\./.test(e) || /\bsubBits\b/.test(e));
-    has('房源列表模板里确有数据插值（防断言空转）', dataInterps.length > 0);
-    // 逐字段用完整字段名核对（不能用子串，否则 d.tag 会误伤 d.tagCls）。
-    // 规则：插值里出现该字段，就必须有 esc(该字段)；这样以后新增字段忘了转义会被这里挡住。
-    for (const field of ['h.community', 'h.report_no', 'h.score_global', 'h.total_price_wan', 'h.unit_price', 'd.tag', 'd.tagCls', 'subBits']) {
-      const fieldRe = new RegExp(`\\b${field.replace(/\./g, '\\.')}\\b`);
-      const bad = dataInterps.filter(e => fieldRe.test(e) && !e.includes(`esc(${field}`));
-      eq(`房源列表里 ${field} 的插值全部经 esc() 转义`, bad, []);
-    }
+  // 全文件扫描，而不是只盯房源列表：第一批漏了列表，第二批漏了对比矩阵和 marker 标签，
+  // 教训是「只修被点名的那处」会漏掉同文件里的其他地方，所以按整份文件扫。
+  // textContent 由浏览器自动转义，先排除这些行，否则全是噪音。
+  const riskyLines = pageSrc.split('\n').filter(l => !/\.textContent\s*[+]?=/.test(l));
+  const allInterps = riskyLines.flatMap(l => [...l.matchAll(/\\\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map(m => m[1]));
+  const dataInterps = allInterps.filter(e => /\b(h|d)\./.test(e) || /\bsubBits\b/.test(e));
+  has('地图页面确有数据插值（防断言空转）', dataInterps.length > 0);
+  // 逐字段用完整字段名核对（不能用子串，否则 d.tag 会误伤 d.tagCls）。
+  // 规则：插值里出现该字段，就必须有 esc(该字段)；以后新增字段忘了转义会被这里挡住。
+  for (const field of [
+    'h.community', 'h.report_no', 'h.district', 'h.type', 'h.score_global',
+    'h.total_price_wan', 'h.unit_price', 'h.area_sqm', 'h.built_year', 'h.policy_tax_wan',
+    'd.tag', 'd.tagCls', 'subBits',
+  ]) {
+    const fieldRe = new RegExp(`\\b${field.replace(/\./g, '\\.')}\\b`);
+    const bad = dataInterps.filter(e => fieldRe.test(e) && !e.includes(`esc(${field}`));
+    eq(`地图页面里 ${field} 的插值全部经 esc() 转义`, bad, []);
+  }
 
+  // 内联事件属性是 esc() 的盲区：HTML 实体会在 JS 求值前被还原，
+  // 所以 esc() 转出来的 &#39; 会被变回 ' 从而闭合 JS 字符串。只能禁止这种写法。
+  const inlineHandlers = pageSrc.match(/on[a-z]+\s*=\s*"[^"]*\\\$\{/g) || [];
+  eq('没有把数据插值拼进内联事件属性（esc 挡不住 JS 上下文）', inlineHandlers, []);
+
+  {
     // 静态检查只能证明"写了 esc"，证明不了"真的能挡住"。所以这里真跑一次渲染：
     // 用源码里真实的 esc() 与真实的模板，喂一份恶意房源数据，看渲染结果里还剩什么标签。
     // BT = 反引号，用 String.fromCharCode 拼接，避免这段断言自身陷入转义地狱。
