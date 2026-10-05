@@ -1,6 +1,6 @@
 {
   "name": "house-ops",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Runs inside your coding agent: scan listings, verify every number against official sources, score against your own needs. 在编码 agent 里运行的购房搜索·交叉验证·个性化评估操作台。",
   "author": {
     "name": "ohwald",
