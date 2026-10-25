@@ -7,6 +7,7 @@ import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, SCAN_STATUS } from '../scrapers/_fields.mjs';
+import { TREND_CONSTANTS } from './lib/trend.mjs';
 import { checkGranularity } from './lib/official-sources.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +51,7 @@ const sysFiles = [
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
   'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/lib/detect.mjs',
   'scripts/lib/official-sources.mjs', 'scripts/dashboard.mjs',
-  'scripts/map.mjs',
+  'scripts/map.mjs', 'scripts/trend.mjs', 'scripts/lib/trend.mjs',
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
 ];
 for (const f of sysFiles) {
@@ -159,7 +160,19 @@ try {
   check('fail', 'scan schema 一致性', `读取失败: ${err.message}`);
 }
 
-// 6b. 政务源 granularity 枚举自一致（取值必须落在 SOURCE_GRANULARITIES 原子档内，多粒度用内联数组）
+// 6b. 趋势常量一致性：modes/scan.md（SoT 文本）的常量表与 lib/trend.mjs 的 TREND_CONSTANTS 断言
+try {
+  const scanDoc = await readFile(join(root, 'modes/scan.md'), 'utf8');
+  const missing = Object.entries(TREND_CONSTANTS)
+    .map(([k, v]) => `${k}=${v}`)
+    .filter((token) => !scanDoc.includes(token));
+  check(missing.length ? 'fail' : 'pass', '趋势常量一致性（scan.md ↔ lib/trend.mjs）',
+    missing.length ? `scan.md 常量表缺少/漂移: ${missing.join(', ')}` : `${Object.keys(TREND_CONSTANTS).length} 个趋势常量与文档一致`);
+} catch (err) {
+  check('fail', '趋势常量一致性', `读取失败: ${err.message}`);
+}
+
+// 6c. 政务源 granularity 枚举自一致（取值必须落在 SOURCE_GRANULARITIES 原子档内，多粒度用内联数组）
 try {
   const g = await checkGranularity(root);
   check(g.bad.length ? 'fail' : 'pass', '政务源 granularity 枚举自一致',

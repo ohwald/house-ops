@@ -27,6 +27,7 @@
 3. `detect` 输出的 `notes` 是抓取前必读（反爬强度、假房源风险、条款约束）。
 4. `page_type` 不是 `listing` 时（成交页/小区页/新房页），按对应语境调整采集口径并向用户确认意图。
 5. **续跑检查（落盘前必做）**：跑 `node scripts/scan.mjs match <record.json>` / `history <小区名>`——`data/scans/` 已有同实体（实体指纹：小区 + 面积 ±0.6㎡ + 户型 + 总楼层 + 朝向 + 年代）记录时**续跑补全，不重复已确认项**：只补变动与缺失字段（总价/调价/带看/在售状态/成交锚点），已核实过的字段沿用旧值并在 `notes` 注明沿用；不重跑已完成的联网核实。
+6. **小区页（page_type: community）采集口径**：房天下小区频道 `www.fang.com/xiaoqu/{城市}-{ID}` 为 SSR 直抓（贝壳/链家小区页有登录墙，不绕）。可采字段：**月度参考均价**（连同"（MM月参考价）"的参考月份一起记录）、建成年代、位置（区/板块/地址）、物业费/容积率等小区属性；写入记录顶层 `community`/`district`，均价示例：`notes: 小区参考均价 54321 元/㎡（2026-08 参考价，实采 2026-10-25）`。**该页无逐套在售列表、无成交记录**——逐套盘口仍走 esf 列表/详情页。小区页扫描是趋势体系的低频校准锚（月度粒度），不登记 watchlist、不占报告编号。
 
 ## 联网预算与中断（status: complete | partial）
 
@@ -181,6 +182,39 @@
 - 登记进扫描记录 `evidence` 数组（type/path/source_url/captured_at/note），verify 与报告引用时给相对路径
 - 归档命令：`node scripts/scan.mjs evidence save <record.json> huxing /tmp/户型图.png --note "1440px框架图"`（URL 直下；防盗链时先浏览器另存为本地文件）
 - 类型白名单：`huxing | photo | gov_notice | policy_pdf | screenshot | other`
+
+## 趋势读数（trend）
+
+同一小区的多次扫描天然构成**盘口快照时间序列**；`scripts/trend.mjs`（引擎 `scripts/lib/trend.mjs`，纯函数）把它变成周度边际指数：
+
+```bash
+node scripts/trend.mjs build [--corpus <dir>] [--out <dir>] [--today YYYY-MM-DD]  # 重算并落快照 data/trend/index-{date}.json（追加式）
+node scripts/trend.mjs show <小区关键词> [--dir <dir>]                            # 读最新快照出读数卡
+```
+
+口径（SoT：`GLOSSARY.md` 趋势与价格推测节 + ADR-0003/0004）：
+
+- **边际事件**由相邻快照对比推断：调价（方向+幅度）、新挂牌（vs 当日存量中枢偏离）、下架（只计供给减少，**不猜是否成交**）；跨平台/重挂已按实体指纹归并，一套房多次采集只算一套的事件。
+- **周度小区指数** = 该周幅度事件的中位数（时近性加权在窗口累计时生效）；**周幅度事件 <3 → 该周 index=null**（`not_enough_data`，沉默 ≠ 稳定），未覆盖周不前向填充。
+- **信号**：温度（冷/温/热/失速四档）、右侧 N 周（连续同向非空周累计 |幅度| ≥ 阈值，跳周即断裂）；累计窗口近 4 周 / 近 12 周。
+- **聚合封顶**（ADR-0003）：关注池（≥1 个已索引小区）+ 板块级（同板块 ≥3 个已索引小区才输出）；**城市级/全国级没有代码路径**，需要大盘读数引用政务源。
+- **趋势不进六维评分**（ADR-0004）：只作 negotiate 议价时机与 map 呈现的上下文；成交锚点只用于回测校准（`calibration.badge`，默认 uncalibrated），不进指数。
+- partial / URL 未实访（`capture.url_verified: false`）的记录不进趋势（ADR-0002）。
+- 两个时点不构成趋势：冷启动期小区如实输出 `not_enough_data` 是设计行为，不是故障——按周复扫积累事件即可。
+
+常量表（`TREND_CONSTANTS`，doctor 断言本表与代码不漂移；用户可在 `modes/_custom.md` 声明覆盖值）：
+
+| 常量 | 含义 |
+|---|---|
+| half_life_weeks=2 | 时近性加权半衰期（周） |
+| min_events_per_week=3 | 周幅度事件下限，低于则该周不产指数 |
+| window_4w=4 | 近 4 周累计窗口 |
+| window_12w=12 | 近 12 周累计窗口 |
+| delist_after_days=21 | 实体缺位多少天记下架（供给事件） |
+| min_district_communities=3 | 板块级聚合门槛（已索引小区数） |
+| stalling_monthly_pct=-1.5 | 失速档阈值（近 4 周累计 ≤ 此值） |
+| hot_threshold_pct=0.8 | 热档阈值（近 4 周累计 ≥ 此值） |
+| right_side_trigger_pct=0.8 | 右侧确认的连续同向累计幅度阈值 |
 
 ## 分类分析引擎（analysis.mjs + `scan.mjs analyze`）
 

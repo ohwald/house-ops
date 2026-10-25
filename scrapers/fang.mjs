@@ -13,7 +13,8 @@ export default {
     coverage: '无公开成交明细；「查房价」频道为估算口径，最高按「挂牌数据」档',
   },
   notes: [
-    '假房源/低价引流盘比例较高——价格必须与链家/贝壳成交页或政务源交叉验证后才可进报告',
+    '假房源/低价引流盘比例较高——价格必须与链家/贝壳成交页或政务源交叉验证后才进报告',
+    '小区页 /xiaoqu/{城市}-{ID}：月度参考均价（估算口径）+ 建成年代 + 位置，无逐套在售、无成交——逐套盘口走 esf 列表/详情页',
     '仅限个人购房研究用途：遵守平台条款，不批量抓取、不公开再分发页面内容',
   ],
   detect(url) {
@@ -29,6 +30,12 @@ export default {
     const section = labels.find((l) => l === 'esf' || l === 'newhouse') ?? '';
     const cityCode = labels.find((l) => l !== 'esf' && l !== 'newhouse') ?? labels[labels.length - 1];
     const path = u.pathname;
+    // 小区频道两种 URL 形态（2026-10 实测）：www.fang.com/xiaoqu/{城市}-{ID} 与 esf 站 /loupan/{ID}.htm
+    // 注意 sh.fang.com/xiaoqu 是 404、xiaoqu.sh.fang.com TLS 拒连——别按子域猜。
+    const xq = /^\/xiaoqu\/([a-z]{2,4})-(\d+)\/?$/i.exec(path);
+    if (xq) return { page_type: 'community', city_code: xq[1].toLowerCase(), listing_id: xq[2] };
+    const lp = /^\/loupan\/(\d+)\.htm$/i.exec(path);
+    if (lp) return { page_type: 'community', city_code: cityCode, listing_id: lp[1] };
     let pageType = 'unknown';
     let listingId = null;
     if (section === 'esf') {
