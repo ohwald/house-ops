@@ -222,7 +222,7 @@ export function buildEntityHistory(records, { staleDays = 14, today = null } = {
     const fp = listingFingerprint(rec);
     const ok = fp.community != null && fp.area != null;
     const target = ok
-      ? groups.find((g) => g._fp.community === fp.community && Math.abs(g._fp.area - fp.area) <= 0.6)
+      ? groups.find((g) => g._fp && g._fp.community === fp.community && Math.abs(g._fp.area - fp.area) <= 0.6)
       : null;
     if (target) target.records.push(rec);
     else groups.push({ _fp: ok ? fp : null, records: [rec] });

@@ -26,6 +26,9 @@ import { solarElevation, noiseLevelAt } from './insight.mjs';
 import { buildEvidenceName, evidenceDirFor, evidenceEntry, EVIDENCE_TYPES } from './evidence.mjs';
 import { loadScrapers, detectPlatform, liftMobileCity } from '../scrapers/_registry.mjs';
 import {
+  RESCAN_BUDGET, planRescan, scheduleDelay, extractFangListing, extractFangCommunity, buildRecord,
+} from './lib/rescan.mjs';
+import {
   TREND_SCHEMA, isoWeek, normCommunity, trendEligibleRecords, groupByCommunity,
   extractCommunityEvents, weeklyIndex, cumulativeIndex, nEventsWindow, temperatureOf,
   rightSideWeeks, buildSnapshot, collectAnchors, cumulativeBetween, calibrate, badgeOf,
@@ -800,6 +803,60 @@ const matrix = [
 for (const [url, want] of matrix) eq(`detect ${url.slice(8, 48)}`, detectOne(url), want);
 eq('liftMobileCity（m 子域城市提升）', liftMobileCity('m', 'sh/ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
 eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
+
+// ---------- 自动复扫（T9 #23：计划/提取/记录组装——canned fixture，无网络） ----------
+
+{
+  // canned fixture 按 2026-10-26 实测标记造：详情页 price_esf/元/平米/JSON-LD/面包屑；小区页 meta Description
+  const listingHtml = '<div class="trl-item price_esf sty1"><i>568</i>万 </div>'
+    + '59019元/平米<div class="tt"> 2室2厅1卫 </div>共11层'
+    + '"建筑面积","value":"96.24㎡"'
+    + '"挂牌时间","value":"2026-05-06"'
+    + '<a href="/loupan/1210031493.htm" id="juhexq_A01_01_05" class="blue"> 由由新邸</a>';
+  const exL = extractFangListing(listingHtml);
+  eq('listing 提取（总价/单价/面积/户型/楼层/挂牌时间/小区名）', exL.status === 'ok' && exL.listing, {
+    total_price_wan: 568, unit_price: 59019, area_sqm: 96.24,
+    layout: '2室2厅1卫', floor: '共11层', listed_at: '2026-05-06',
+  });
+  eq('listing 小区名与小区 ID（面包屑第二捕获组）', [exL.community, exL.community_id], ['由由新邸', '1210031493']);
+
+  const brokenHtml = '<html><body>页面改版了，没有任何已知锚点</body></html>';
+  const exBroken = extractFangListing(brokenHtml);
+  eq('布局变更 → parse_failed 且缺项显式（不编数字）',
+    [exBroken.status, exBroken.missing], ['parse_failed', ['total_price_wan', 'unit_price', 'area_sqm', 'community']]);
+
+  const communityHtml = 'content="上海由由新邸小区网，参考均价：60609元/㎡，位于浦东北蔡，现有二手房源4套，竣工时间2001-01-01年，小区地址是严桥路58弄"'
+    + '<div>09月参考均价</div>';
+  const exC = extractFangCommunity(communityHtml);
+  eq('community 提取（参考均价/月份/在售套数/竣工年代）', exC, {
+    status: 'ok', reference: { unit_price: 60609, as_of_month: '09月参考价' }, listing_count: 4, built_year: 2001,
+  });
+  eq('community 参考价缺失 → parse_failed', extractFangCommunity('<html>无价格</html>').status, 'parse_failed');
+
+  // 计划器：去重/分类/预算截断/不支持平台显式计数
+  const scrapers = await loadScrapers(join(ROOT, 'scrapers'));
+  const urls = [
+    'https://sh.esf.fang.com/chushou/3_511432907.htm',
+    'https://sh.esf.fang.com/chushou/3_511432907.htm', // 重复 → 去重
+    'https://sh.esf.fang.com/loupan/1210031493.htm',
+    'https://shanghai.anjuke.com/prop/view/A1686520304', // 非房天下 → unsupported
+  ];
+  const plan = planRescan(urls, scrapers, { maxFetches: 2 });
+  eq('计划器（去重 2 条 + 预算内截断 + unsupported 显式）',
+    [plan.fetches.length, plan.skipped_cap, plan.unsupported.length, plan.unsupported[0].includes('anjuke')], [2, 0, 1, true]);
+  eq('计划器 kinds', plan.fetches.map((f) => f.kind).sort().join(','), 'community,listing');
+  const plan15 = planRescan(Array.from({ length: 15 }, (_, i) => `https://sh.esf.fang.com/chushou/9_${i}.htm`), scrapers);
+  eq('预算硬上限 12（超额显式计数）', [plan15.fetches.length, plan15.skipped_cap, plan15.cap], [12, 3, 12]);
+  eq('预算口径与 scan 同源（≤12）', RESCAN_BUDGET.max_fetches_per_call ?? RESCAN_BUDGET.max_fetches_per_run, 12);
+  has('抓取节奏 = 下限 + 抖动', scheduleDelay({ minDelayMs: 100, jitterMs: 50, rng: () => 0.5 }) === 125);
+
+  const rec = buildRecord('listing', exL, { url: 'https://sh.esf.fang.com/chushou/8_1020829729.htm', listingId: '8_1020829729', today: '2026-10-26' });
+  eq('记录组装（schema/留痕/页型）',
+    [rec.schema, rec.status, rec.platform, rec.page_type, rec.capture.channel, rec.capture.url_verified, rec.community],
+    ['house-ops.scan/1', 'complete', 'fang', 'listing', 'gha-fetch', true, '由由新邸']);
+  const recC = buildRecord('community', exC, { url: 'https://sh.esf.fang.com/loupan/1210031493.htm', listingId: '1210031493', today: '2026-10-26' });
+  has('community 记录 notes 含校准锚语义', /参考均价 60609 元\/㎡（09月参考价/.test(recC.notes) && /不登记 watchlist/.test(recC.notes));
+}
 
 // ---------- 仓库卫生：文档命令不漂移 / skill 镜像软链完整 ----------
 // 只在「仓库形态」下断言：打包产物里没有 README.md 也没有 .agents/，自动跳过。

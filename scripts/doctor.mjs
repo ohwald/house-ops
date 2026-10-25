@@ -52,6 +52,7 @@ const sysFiles = [
   'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/lib/detect.mjs',
   'scripts/lib/official-sources.mjs', 'scripts/dashboard.mjs',
   'scripts/map.mjs', 'scripts/trend.mjs', 'scripts/lib/trend.mjs',
+  'scripts/rescan.mjs', 'scripts/lib/rescan.mjs',
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
 ];
 for (const f of sysFiles) {

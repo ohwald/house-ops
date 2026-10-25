@@ -117,7 +117,8 @@
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
-| `scripts/trend.mjs` | 盘口边际趋势：周度小区指数、温度/右侧信号、关注池聚合与校准回测（build/show/backtest；引擎 `scripts/lib/trend.mjs`；口径见 ADR-0003/0004 与 `modes/scan.md` 趋势读数节） |
+| `scripts/trend.mjs` | 盘口边际趋势：周度小区指数、温度/右侧信号、关注池聚合与校准回测（build/show/backtest/band；引擎 `scripts/lib/trend.mjs`；口径见 ADR-0003/0004 与 `modes/scan.md` 趋势读数节） |
+| `scripts/rescan.mjs` | opt-in 自动复扫（fork 用户配合 `templates/actions/rescan.example.yml` 自建 GitHub Actions；确定性提取 `scripts/lib/rescan.mjs`，仅房天下，≤12 次/运行；文档 `docs/automated-rescan.md`，上游仓库无任何活工作流） |
 | `scripts/lib/data.mjs` | stats/dashboard/map 共享数据解析层（报告/watchlist） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
 | `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件静态 HTML `data/map.html`，支持高德地图、通勤圈、筛选与画像导出；页面纯静态，不启动本地服务、不开放端口；零外部依赖） |

@@ -1,0 +1,64 @@
+# Opt-in automated rescan — house-ops
+#
+# 这是模板，不是活工作流：把它拷进【你自己的 fork】的 .github/workflows/rescan.yml 才会生效。
+# 上游 ohwald/house-ops 仓库不含任何自动抓取。
+#
+# 开始之前（务必读完 docs/automated-rescan.md）：
+# 1. 【强烈建议】把 fork 设为 Private —— 采集结果会提交到本仓库的 user-data 分支，
+#    公开 fork = 你的关注清单公开可见。
+# 2. 配置仓库 Variable：Settings → Secrets and variables → Actions → Variables →
+#    新建 WATCH_URLS，值为要追踪的房天下 URL（每行一条，支持 # 注释）：
+#     https://sh.esf.fang.com/chushou/3_511432907.htm      # 在售详情页（逐套盘口）
+#     https://sh.esf.fang.com/loupan/1210031493.htm        # 小区页（月度参考均价，校准锚）
+# 3. 国内平台大概率封锁 GitHub 托管 runner 的 IP 段——若抓取连续失败，推荐自托管 runner
+#    （家里宽带 + 本机 IP）：runs-on 改成 [self-hosted]。
+# 4. 平台条款责任归部署者：仅限个人购房研究、低频、限额（单次 ≤12 次抓取，代码内强制）。
+#    不要调大限额做批量采集。
+#
+# 数据流向：抓取 → data/scans/*.json（追加式）→ trend build → data/trend/index-*.json
+#          → 全部提交到 user-data 分支（main 永远干净，上游 CI 的 privacy guard 不受影响）。
+
+name: rescan
+
+on:
+  schedule:
+    - cron: "17 2 * * 1" # 每周一 02:17 UTC（错峰分钟数，实际触发可能有几十分钟延迟）
+  workflow_dispatch: {}   # 手动触发按钮（Actions 页 → rescan → Run workflow）
+
+concurrency:
+  group: rescan
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rescan:
+    runs-on: ubuntu-latest # 自托管 runner：runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run rescan (cap ≤12 fetches, delay+jitter, fang.com only)
+        env:
+          WATCH_URLS: ${{ vars.WATCH_URLS }}
+        run: node scripts/rescan.mjs
+
+      - name: Commit data to the user-data branch (never main)
+        run: |
+          git config user.name  "house-ops rescan"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin user-data 2>/dev/null || true
+          if git rev-parse --verify origin/user-data >/dev/null 2>&1; then
+            git checkout -B user-data origin/user-data
+          else
+            git checkout --orphan user-data
+            git rm -rf --cached . >/dev/null 2>&1 || true
+          fi
+          # .gitignore 在 main 上拦用户层数据；user-data 分支就是数据分支，强制加入
+          git add -f data/scans data/trend
+          git commit -m "auto-rescan $(date -u +%F) [skip ci]" || echo "nothing to commit"
+          git push origin user-data

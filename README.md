@@ -262,7 +262,7 @@ Score tiers: **≥4.5 strongly recommended** · **4.0–4.4 worth a viewing** ·
 | Anjuke / 5i5j / Fang.com (安居客/我爱我家/房天下) | ✅ | ❌ estimates only (auto-downgraded, never inflated) |
 | Others | generic fallback template | per generic checklist |
 
-> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms.
+> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms. Fork owners may additionally opt into a **low-frequency automated rescan inside their own (private) fork** — see [docs/automated-rescan.md](docs/automated-rescan.md); the upstream repo ships the kit as an inert template, runs nothing itself, and deployment owners own compliance in their deployment.
 
 ## Market coverage
 
@@ -608,7 +608,7 @@ intake 建画像 → 看到候选 → triage 速筛 → scan 验真+采价
 | 安居客 / 我爱我家 / 房天下 | ✅ | ❌ 仅估算行情（自动降档，宁降档不虚标） |
 | 其他平台 | generic 兜底清单 | 按通用清单采集 |
 
-> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发页面数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。
+> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发页面数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。fork 用户可以在**自己的私有 fork** 内另行启用低频自动复扫（模板见 [docs/automated-rescan.md](docs/automated-rescan.md)）：上游只提供惰性模板、自身不运行任何采集，部署方自行承担其部署中的合规责任。
 
 ## 市场覆盖范围
 
