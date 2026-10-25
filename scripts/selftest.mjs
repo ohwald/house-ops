@@ -236,12 +236,15 @@ const tRec = (platform, id, date, unit, over = {}) => ({
     tRec('lianjia', 'f6', '2026-09-07', 51000, { area: 66, urlVerified: false }),
     // 孤点小区：单次采集 → not_enough_data
     tRec('lianjia', 'z1', '2026-09-07', 50000, { community: '孤点小区', area: 95 }),
+    // provenance void（小区不存在判定）→ 不进趋势
+    { ...tRec('lianjia', 'v9', '2026-08-31', 50000, { area: 55 }), provenance: 'void' },
   ];
 
-  // 过滤：14 条 → 12 条（E/F 剔除；孤点保留）
+  // 过滤：15 条 → 12 条（E/F/void 剔除；孤点保留）
   const eligible = trendEligibleRecords(trendRecords);
   eq('trendEligibleRecords 剔除 partial/未实访', eligible.length, 12);
   eq('E/F 不在合格记录中', eligible.filter((r) => ['e5', 'f6'].includes(r.listing_id)).length, 0);
+  eq('void provenance 记录不进趋势（ADR-0002）', eligible.filter((r) => r.listing_id === 'v9').length, 0);
 
   // 分组：趋势测试小区（4 实体）+ 孤点小区（1 实体）
   const groups = groupByCommunity(buildEntityHistory(eligible, { today: '2026-10-12' }));
@@ -275,6 +278,11 @@ const tRec = (platform, id, date, unit, over = {}) => ({
     [-2, -2.2]);
   eq('nEventsWindow 12 周事件数', nEventsWindow(weekly, 12, '2026-10-12'), 7);
   eq('右侧周数（W42 单周 |−2.0| ≥ 0.8；W37 与 W42 不相邻 → 断裂）', rightSideWeeks(weekly), 1);
+  eq('右侧反向重置（新方向单周计 1，旧方向清零）', rightSideWeeks([
+    { week: '2026-W36', monday: '2026-08-31', index: 1 },
+    { week: '2026-W37', monday: '2026-09-07', index: -1 },
+  ]), 1);
+  eq('右侧单周不足阈值 → 0', rightSideWeeks([{ week: '2026-W36', monday: '2026-08-31', index: -0.5 }]), 0);
 
   // 快照组装：小区读数 + 孤点沉默 + 池聚合 + 板块门槛 + 校准初始态
   const snap = buildSnapshot(trendRecords, { today: '2026-10-12' });
@@ -369,6 +377,21 @@ const tRec = (platform, id, date, unit, over = {}) => ({
   eq('回测集成：W40 周指数（4 个幅度事件中位数）', snap.communities['回测小区'].weekly.find((w) => w.week === '2026-W40').index, -2);
   eq('回测集成：1 次评分比较全部命中，低档排除 1',
     snap.calibration, { n: 1, hit_rate: 1, badge: 'uncalibrated', excluded: { low_tier: 1, no_overlap: 0, flat: 0 } });
+}
+
+// 板块正向门槛（T4 验收：同板块 ≥3 个已索引小区 → 输出板块块）
+{
+  const mk = (tag, unit) => [0, 1, 2].flatMap((i) => {
+    const over = { community: `${tag}小区`, district: '浦东·板块测试', area: 100 + i * 7, layout: i === 1 ? '2室1厅' : '3室1厅', floor: i === 2 ? '高楼层(共33层)' : '低楼层(共18层)', year: 2010 + i };
+    return [
+      tRec('fang', `${tag}x${i}`, '2026-09-01', unit + i * 100, over),
+      tRec('fang', `${tag}x${i}`, '2026-09-29', Math.round((unit + i * 100) * 0.98), over),
+    ];
+  });
+  const snap2 = buildSnapshot([...mk('板A', 50000), ...mk('板B', 60000), ...mk('板C', 40000)], { today: '2026-09-29' });
+  const d = snap2.districts['浦东·板块测试'];
+  has('板块 ≥3 正向门槛（3 个已索引小区 → 输出板块块）', !!d && d.n_communities === 3 && d.index_4w != null);
+  eq('板块内小区全部进入关注池（等权）', snap2.pool.n_communities, 3);
 }
 
 // ---------- 真实性三态（ADR-0002 备注标记解析） ----------
@@ -723,6 +746,7 @@ const matrix = [
   ['https://sh.esf.fang.com/chushou/3_511432907.htm', { platform: 'fang', page_type: 'listing', city_code: 'sh', listing_id: '3_511432907' }],
   ['https://www.fang.com/xiaoqu/sh-1211107674', { platform: 'fang', page_type: 'community', city_code: 'sh', listing_id: '1211107674' }],
   ['https://sh.esf.fang.com/loupan/1210031493.htm', { platform: 'fang', page_type: 'community', city_code: 'sh', listing_id: '1210031493' }],
+  ['https://newhouse.fang.com/loupan/1210031493/', { platform: 'fang', page_type: 'new_home', city_code: 'newhouse', listing_id: '1210031493' }],
   ['https://example.com/x', { platform: 'generic', page_type: 'unknown', city_code: null, listing_id: null }],
 ];
 for (const [url, want] of matrix) eq(`detect ${url.slice(8, 48)}`, detectOne(url), want);

@@ -11,9 +11,25 @@
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSnapshot, collectAnchors, calibrate, normCommunity, TREND_SCHEMA } from './lib/trend.mjs';
+import { buildSnapshot, collectAnchors, calibrate, normCommunity, TREND_SCHEMA, TREND_CONSTANTS } from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// --const key=value（可重复）：覆盖 TREND_CONSTANTS（modes/_custom.md 声明的覆盖值由此传入）
+function constOverrides() {
+  const argv = process.argv.slice(2);
+  const out = {};
+  for (let i = 0; i < argv.length - 1; i++) {
+    if (argv[i] !== '--const') continue;
+    const [k, v] = String(argv[i + 1] ?? '').split('=');
+    if (!(k in TREND_CONSTANTS) || !Number.isFinite(Number(v))) {
+      console.error(`⛔ --const ${argv[i + 1]}：键必须 ∈ TREND_CONSTANTS 且值为数字（可选：${Object.keys(TREND_CONSTANTS).join(', ')}）`);
+      process.exit(1);
+    }
+    out[k] = Number(v);
+  }
+  return out;
+}
 
 function flag(name, fallback = null) {
   const argv = process.argv.slice(2);
@@ -43,7 +59,7 @@ async function latestSnapshot(dir, today) {
 const TEMP_LABEL = { cold: '冷', mild: '温', hot: '热', stalling: '失速' };
 const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
 
-function renderCard(key, c, snap) {
+function renderCard(c, snap) {
   const lines = [`📈 趋势读数 · ${c.display}${c.district ? `（${c.district}）` : ''}`];
   lines.push(`   as_of ${snap.as_of} · 校准徽章 ${snap.calibration?.badge ?? 'uncalibrated'}`);
   if (c.status !== 'indexed' || (c.index_4w == null && c.index_12w == null)) {
@@ -85,7 +101,7 @@ if (cmd === 'build') {
     console.log(`📭 ${corpusDir} 下没有扫描记录——趋势指数来自同一小区的多次快照（周度复扫），先跑 scan 采集。`);
     process.exit(0);
   }
-  const snap = buildSnapshot(records, { today: today ?? undefined });
+  const snap = buildSnapshot(records, { today: today ?? undefined, constants: { ...TREND_CONSTANTS, ...constOverrides() } });
   await mkdir(outDir, { recursive: true });
   const file = join(outDir, `index-${snap.as_of}.json`);
   await writeFile(file, `${JSON.stringify(snap, null, 2)}\n`);
@@ -109,13 +125,12 @@ if (cmd === 'build') {
     console.log(`📭 ${corpusDir} 下没有扫描记录——校准回测需要含成交锚点（crosscheck）的扫描记录，先跑 scan 采集。`);
     process.exit(0);
   }
-  const snap = buildSnapshot(records, { today: today ?? undefined });
+  const snap = buildSnapshot(records, { today: today ?? undefined, constants: { ...TREND_CONSTANTS, ...constOverrides() } });
   const r = calibrate(collectAnchors(records), snap.communities, { constants: snap.constants });
   console.log(`🔬 校准回测 · as_of ${snap.as_of} · 徽章 ${r.badge}`);
   console.log(`   评分比较 ${r.n} 次 · 命中 ${r.hits} · 命中率 ${r.hit_rate == null ? '—' : `${(r.hit_rate * 100).toFixed(1)}%`} · 排除：档位不足 ${r.excluded.low_tier} / 无指数重叠 ${r.excluded.no_overlap} / 幅度平坦 ${r.excluded.flat}`);
   for (const c of r.comparisons) {
-    const fmt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
-    console.log(`   ${c.display} | ${c.from} → ${c.to} | 锚点 ${fmt(c.anchor_delta_pct)} [${c.tier}] | 指数 ${fmt(c.index_cum_pct)} | ${c.result}`);
+    console.log(`   ${c.display} | ${c.from} → ${c.to} | 锚点 ${pct(c.anchor_delta_pct)} [${c.tier}] | 指数 ${pct(c.index_cum_pct)} | ${c.result}`);
   }
   if (!r.comparisons.length) console.log('   （暂无比较——评分需要同一小区两个时点的「成交数据」档锚点；锚点稀缺是常态，uncalibrated 是系统在工作）');
 } else if (cmd === 'show') {
@@ -143,7 +158,7 @@ if (cmd === 'build') {
     console.log(`未找到匹配「${keyword}」的小区（快照 as_of ${snap.as_of}，现有：${Object.values(snap.communities).map((c) => c.display).join('，') || '无'}）。`);
     process.exitCode = 2;
   } else {
-    for (const [key, c] of hit) console.log(renderCard(key, c, snap));
+    for (const [, c] of hit) console.log(renderCard(c, snap));
   }
 } else {
   console.error('用法: node scripts/trend.mjs <build|show|backtest> …（详见本文件头注释与 modes/scan.md）');

@@ -30,15 +30,17 @@ export default {
     const section = labels.find((l) => l === 'esf' || l === 'newhouse') ?? '';
     const cityCode = labels.find((l) => l !== 'esf' && l !== 'newhouse') ?? labels[labels.length - 1];
     const path = u.pathname;
-    // 小区频道两种 URL 形态（2026-10 实测）：www.fang.com/xiaoqu/{城市}-{ID} 与 esf 站 /loupan/{ID}.htm
+    // 小区频道两种 URL 形态（2026-10 实测）：www.fang.com/xiaoqu/{城市}-{ID} 与 esf 站 /loupan/{ID}.htm。
+    // /loupan/ 只在 esf 子域判 community——newhouse 频道同为 /loupan/ 路径，是新房楼盘页不是二手小区页。
     // 注意 sh.fang.com/xiaoqu 是 404、xiaoqu.sh.fang.com TLS 拒连——别按子域猜。
     const xq = /^\/xiaoqu\/([a-z]{2,4})-(\d+)\/?$/i.exec(path);
     if (xq) return { page_type: 'community', city_code: xq[1].toLowerCase(), listing_id: xq[2] };
-    const lp = /^\/loupan\/(\d+)\.htm$/i.exec(path);
-    if (lp) return { page_type: 'community', city_code: cityCode, listing_id: lp[1] };
     let pageType = 'unknown';
     let listingId = null;
     if (section === 'esf') {
+      // esf 小区页 /loupan/{ID}.htm（2026-10-25 实测 sh.esf.fang.com/loupan/1210031493.htm）
+      const lp = /^\/loupan\/(\d+)\.htm$/i.exec(path);
+      if (lp) return { page_type: 'community', city_code: cityCode, listing_id: lp[1] };
       // 详情语法多变：/house/xxx.htm、/house-a015/f_047_1.htm、/chushou/3_511432907.htm（2026-09 实测）
       const seg = /\/(?:house[^/]*|chushou)\/([^/]+?\.htm)$/i.exec(path) || /\/house\/([^/]+?)\.htm/i.exec(path);
       if (seg) {

@@ -30,6 +30,7 @@
 | 路径 | 内容 |
 |---|---|
 | `AGENTS.md`、`CLAUDE.md` | 总规范与 CLI 入口 |
+| `GLOSSARY.md` | 领域术语表（趋势与价格推测词汇的 SoT） |
 | `.agents/skills/house-ops/SKILL.md` | 技能路由器（`.claude/`、`.zcode/` 下为符号链接） |
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |

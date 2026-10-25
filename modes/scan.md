@@ -200,12 +200,12 @@ node scripts/trend.mjs backtest [--corpus <dir>]                                
 - **边际事件**由相邻快照对比推断：调价（方向+幅度）、新挂牌（vs 当日存量中枢偏离）、下架（只计供给减少，**不猜是否成交**）；跨平台/重挂已按实体指纹归并，一套房多次采集只算一套的事件。
 - **周度小区指数** = 该周幅度事件的中位数（时近性加权在窗口累计时生效）；**周幅度事件 <3 → 该周 index=null**（`not_enough_data`，沉默 ≠ 稳定），未覆盖周不前向填充。
 - **信号**：温度（冷/温/热/失速四档）、右侧 N 周（连续同向非空周累计 |幅度| ≥ 阈值，跳周即断裂）；累计窗口近 4 周 / 近 12 周。
-- **聚合封顶**（ADR-0003）：关注池（≥1 个已索引小区）+ 板块级（同板块 ≥3 个已索引小区才输出）；**城市级/全国级没有代码路径**，需要大盘读数引用政务源。
+- **聚合封顶**（ADR-0003）：关注池（≥1 个已索引小区）+ 板块级（同板块 ≥3 个已索引小区才输出）；池/板块指数 = 成员小区周指数的**等权中位数**（小区等权，防止挂牌多的大小区支配）；**城市级/全国级没有代码路径**，需要大盘读数引用政务源。
 - **趋势不进六维评分**（ADR-0004）：只作 negotiate 议价时机与 map 呈现的上下文；成交锚点只用于回测校准（`calibration.badge`，默认 uncalibrated），不进指数。
 - partial / URL 未实访（`capture.url_verified: false`）的记录不进趋势（ADR-0002）。
 - 两个时点不构成趋势：冷启动期小区如实输出 `not_enough_data` 是设计行为，不是故障——按周复扫积累事件即可。
 
-常量表（`TREND_CONSTANTS`，doctor 断言本表与代码不漂移；用户可在 `modes/_custom.md` 声明覆盖值）：
+常量表（`TREND_CONSTANTS`，doctor 断言本表与代码不漂移；用户可在 `modes/_custom.md` 声明覆盖值，调用 CLI 时以 `--const key=value` 传入，可重复）：
 
 | 常量 | 含义 |
 |---|---|
@@ -222,6 +222,7 @@ node scripts/trend.mjs backtest [--corpus <dir>]                                
 | calibration_hit_rate=0.6 | calibrated 命中率门槛（≥） |
 | calibration_refute_rate=0.4 | refuted 命中率门槛（<） |
 | calibration_flat_pct=0.5 | 锚点变动 |Δ| 低于此幅度（%）视为平坦，不参与方向评分 |
+| calibration_index_flat_pct=0.05 | 指数窗口累计 |累计| 低于此幅度（%）视为平坦，不参与方向评分 |
 
 ## 分类分析引擎（analysis.mjs + `scan.mjs analyze`）
 

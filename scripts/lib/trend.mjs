@@ -31,6 +31,7 @@ export const TREND_CONSTANTS = Object.freeze({
   calibration_hit_rate: 0.6,   // calibrated 门槛：命中率 ≥ 60%
   calibration_refute_rate: 0.4, // refuted 门槛：命中率 < 40%（信号停止可引用）
   calibration_flat_pct: 0.5,   // 锚点变动 |Δ| < 0.5% 视为平坦，不参与方向评分
+  calibration_index_flat_pct: 0.05, // 指数窗口累计 |累计| < 0.05% 视为平坦，不参与方向评分
 });
 
 // ---------- 基础工具 ----------
@@ -59,12 +60,13 @@ const weeksBetween = (mondayA, mondayB) => Math.round((new Date(mondayB) - new D
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 export const normCommunity = (s) => String(s ?? '').replace(/[\s（）()·、]/g, '').toLowerCase();
 
-// ---------- 记录过滤（ADR-0002：partial / URL 未实访的不进指数） ----------
+// ---------- 记录过滤（ADR-0002：partial / URL 未实访 / provenance void 的不进指数） ----------
 
 export function trendEligibleRecords(records) {
   return (records ?? []).filter((r) =>
     r?.status !== 'partial'
     && r?.capture?.url_verified !== false
+    && r?.provenance !== 'void'
     && String(r?.community ?? '').trim() !== '');
 }
 
@@ -91,17 +93,17 @@ function entityPoints(e) {
     .filter((p) => p.date);
 }
 
+// 小区全部采集日期（含无价格的复扫/小区页记录）——下架判定与覆盖度都以此为准
+const communityCaptureDates = (entities) => [...new Set((entities ?? []).flatMap((e) =>
+  (e.listings ?? []).flatMap((l) => (l.captures ?? []).map((c) => String(c.date ?? '')).filter(Boolean))))].sort();
+
 // ---------- 边际事件提取（相邻快照对比；实体已跨平台/重挂归并） ----------
 
 // 事件类型：price_change（带幅度）/ new_listing（幅度=vs 当日存量中枢的偏离，无存量则无幅度）/
 //          delisting（仅供给事件，无幅度，不进指数中位数）。幅度口径优先单价。
 export function extractCommunityEvents(entities, { constants = TREND_CONSTANTS } = {}) {
   const events = [];
-  // 小区末次采集日取**全部**采集日期（含无价格的复扫/小区页记录）——
-  // 否则"实体缺位"的下架判定会因小区只有无价格记录而漏触发
-  const allDates = [...new Set((entities ?? []).flatMap((e) =>
-    (e.listings ?? []).flatMap((l) => (l.captures ?? []).map((c) => String(c.date ?? '')).filter(Boolean))))].sort();
-  const communityLast = allDates[allDates.length - 1] ?? null;
+  const communityLast = communityCaptureDates(entities).at(-1) ?? null;
 
   for (const e of entities ?? []) {
     // 实体价格点：同日多键 → 取中位数并为一日；只留可比（单价或总价）点
@@ -319,7 +321,7 @@ export function calibrate(anchorsByCommunity, communitiesWeekly, { constants = T
         tier: a1.tier, anchor_delta_pct: anchorDelta, index_cum_pct: cum,
       };
       if (cum == null) { excluded.no_overlap++; comparisons.push({ ...base, result: 'excluded:no_overlap' }); continue; }
-      if (Math.abs(anchorDelta) < constants.calibration_flat_pct || Math.abs(cum) < 0.05) {
+      if (Math.abs(anchorDelta) < constants.calibration_flat_pct || Math.abs(cum) < constants.calibration_index_flat_pct) {
         excluded.flat++; comparisons.push({ ...base, result: 'excluded:flat' }); continue;
       }
       const hit = anchorDelta > 0 === cum > 0;
@@ -349,15 +351,14 @@ export function buildSnapshot(records, { today = null, constants = TREND_CONSTAN
     const index4 = cumulativeIndex(weekly, { window: constants.window_4w, asOf, constants });
     const index12 = cumulativeIndex(weekly, { window: constants.window_12w, asOf, constants });
     const hasIndex = weekly.some((w) => w.index != null);
-    const allDates = g.entities.flatMap((e) =>
-      (e.listings ?? []).flatMap((l) => (l.captures ?? []).map((c) => String(c.date ?? '')).filter(Boolean))).sort();
+    const allDates = communityCaptureDates(g.entities);
     communities[g.key] = {
       display: g.display,
       district: g.district,
       index_4w: index4,
       index_12w: index12,
       temperature: temperatureOf(index4, { constants }),
-      right_side_weeks: hasIndex ? rightSideWeeks(weekly, { constants }) : 0,
+      right_side_weeks: rightSideWeeks(weekly, { constants }),
       n_events_12w: nEventsWindow(weekly, constants.window_12w, asOf),
       status: hasIndex ? 'indexed' : 'not_enough_data',
       weekly,
@@ -384,7 +385,7 @@ export function buildSnapshot(records, { today = null, constants = TREND_CONSTAN
       index_4w: index4,
       index_12w: cumulativeIndex(weekly, { window: constants.window_12w, asOf, constants }),
       temperature: temperatureOf(index4, { constants }),
-      right_side_weeks: weekly.some((w) => w.index != null) ? rightSideWeeks(weekly, { constants }) : 0,
+      right_side_weeks: rightSideWeeks(weekly, { constants }),
       n_communities: items.length,
       weekly,
     };

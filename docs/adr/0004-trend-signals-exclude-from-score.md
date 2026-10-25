@@ -13,5 +13,5 @@
 ## 后果
 
 - 评分稳定性优先：趋势是周度波动量，直接进分数会让同一房源的评分随周摆动，破坏"报告编号即主键、报告是历史事实记录"的契约；
-- `modes/evaluate.md`（SoT）与 `scripts/stats.mjs` 的 schema 同步增加 `trend` 键（context 层），改键名两处同步的仓库铁律不变；
+- `modes/evaluate.md`（SoT）与 `scripts/stats.mjs` 的 schema **在 T7（#21）落地时必须同一次变更**增加 `trend` 键（context 层）——撰写本 ADR 时该项尚未实施（见 ticket #21），改键名两处同步的仓库铁律不变；
 - negotiate/map 引用趋势信号时必须携带校准徽章（ADR-0003 的采样披露同理由派生：未校准信号不得用于确定性话术）。
