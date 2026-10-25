@@ -18,6 +18,7 @@ import { groupDetections, overBudgetWarning } from './lib/detect.mjs';
 import { checkGranularity, readOfficialSources, filterSources } from './lib/official-sources.mjs';
 import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTrendSnapshot } from './lib/data.mjs';
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
+import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
@@ -493,9 +494,18 @@ eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
       const want = decide(d);
       return ['tier', 'markerCls', 'tag', 'tagCls', 'risk'].every(k => d.decision[k] === want[k]);
     }), true);
+  // T8：DEMO 趋势字段与 TREND_TEMP_LABEL 语义一致（温度键合法、计数为数值或空），页面温度标签取自同一常量
+  has('DEMO 趋势字段与温度标签表一致（防漂移）',
+    DEMO_HOUSES.every(dh => dh.trend_temp == null || (
+      !!TREND_TEMP_LABEL[dh.trend_temp]
+      && (dh.trend_right == null || typeof dh.trend_right === 'number')
+      && (dh.trend_events == null || typeof dh.trend_events === 'number'))), true);
   const html = renderMapHtml({ initialData: { reports: [], watchlist: [], profile: null, rawYaml: '', geoCache: {} }, config: {} });
   eq('PROFILE_FIELDS 表单 id 全部存在于页面骨架',
     PROFILE_FIELDS.every(f => (Array.isArray(f.form) ? f.form : f.form ? [f.form] : []).every(id => html.includes(`id="${id}"`))), true);
+  has('详情卡有盘口趋势行（m-trend-line）', html.includes('id="m-trend-line"'), true);
+  has('温度标签表注入页面（TREND_TEMP_LABEL 单一真源）',
+    html.includes('const TREND_TEMP_LABEL = {"cold":"冷","mild":"温","hot":"热","stalling":"失速"};'), true);
 }
 
 // ---------- profile 契约（C4：键表驱动 parse/update 对称 + 往返 golden） ----------

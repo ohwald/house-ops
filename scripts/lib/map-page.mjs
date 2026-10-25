@@ -368,7 +368,10 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
 
         const d = h.decision;
         const scoreClass = d.markerCls === 'low' ? 'score-low' : (d.markerCls === 'high' ? 'score-high' : 'score-mid');
-        const subBits = [h.district, h.area_sqm ? h.area_sqm + '㎡' : null, h.type || null, h.built_year ? h.built_year + '年' : null]
+        const trendBits = (h.trend_temp && TREND_TEMP_LABEL[h.trend_temp])
+          ? ['盘口' + TREND_TEMP_LABEL[h.trend_temp] + (h.trend_right ? '·右侧' + h.trend_right + '周' : '')]
+          : [];
+        const subBits = [h.district, h.area_sqm ? h.area_sqm + '㎡' : null, h.type || null, h.built_year ? h.built_year + '年' : null, ...trendBits]
           .filter(Boolean).join(' · ');
 
         item.innerHTML = \`
@@ -408,6 +411,14 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
 
       document.getElementById('m-trend-cycle').textContent = '周期状态: ' + (h.market_trend_text || (h.market_trend === 'bottoming' ? '筑底平稳' : '阴跌下行'));
       document.getElementById('m-trend-discount').textContent = '挂牌-成交折价空间: ' + (h.discount_space_text || (h.discount_space === 'wide' ? '议价弹性大(5%+)' : '正常议价空间(3-5%)'));
+      // 盘口边际趋势（context 层，ADR-0004）：仅 indexed 小区携带；无快照/未索引 → 明示无数据，不冒充
+      // （纯字符串拼接，不走模板插值——textContent 路径由浏览器转义，selftest 的 esc 扫描也不涉及）
+      if (document.getElementById('m-trend-line')) {
+        const tl = h.trend_temp && TREND_TEMP_LABEL[h.trend_temp]
+          ? '盘口趋势: ' + TREND_TEMP_LABEL[h.trend_temp] + (h.trend_right ? ' · 右侧 ' + h.trend_right + ' 周' : '') + ' · 事件(12w) ' + (h.trend_events ?? '—')
+          : '盘口趋势: 暂无（周度复扫后 trend build 刷新）';
+        document.getElementById('m-trend-line').textContent = tl;
+      }
 
       document.getElementById('m-planning-impact').textContent = '规划红利: ' + (h.urban_planning_text || '现状配套为主，暂无重大新增规划');
       document.getElementById('m-planning-env').textContent = '地块用途与施工: ' + (h.urban_planning_env || '周边地块现状平稳');

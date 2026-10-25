@@ -37,7 +37,10 @@ export const TREND_CONSTANTS = Object.freeze({
   band_min_anchor_samples: 5,  // 锚点样本 <5 → 不出区间，退回 crosscheck 并明示
 });
 
-// ---------- 基础工具 ----------
+// 温度中文标签（唯一实现；CLI 读数卡与地图页共用，避免两处手抄漂移）
+export const TREND_TEMP_LABEL = Object.freeze({ cold: '冷', mild: '温', hot: '热', stalling: '失速' });
+
+// 基础工具 ----------
 
 const round1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
 

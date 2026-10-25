@@ -13,7 +13,7 @@
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSnapshot, collectAnchors, calibrate, fairPriceBand, normCommunity, TREND_SCHEMA, TREND_CONSTANTS } from './lib/trend.mjs';
+import { buildSnapshot, collectAnchors, calibrate, fairPriceBand, normCommunity, TREND_SCHEMA, TREND_CONSTANTS, TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { loadTrendSnapshot } from './lib/data.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +50,6 @@ async function loadCorpus(dir) {
   return records;
 }
 
-const TEMP_LABEL = { cold: '冷', mild: '温', hot: '热', stalling: '失速' };
 const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
 
 function renderCard(c, snap) {
@@ -62,7 +61,7 @@ function renderCard(c, snap) {
     lines.push(`   继续按周复扫积累事件；两次采集不构成趋势，三次以上才谈方向。`);
     return lines.join('\n');
   }
-  lines.push(`   状态: indexed · 近4周 ${pct(c.index_4w)} · 近12周 ${pct(c.index_12w)} · 温度 ${TEMP_LABEL[c.temperature] ?? '—'} · 右侧 ${c.right_side_weeks} 周 · 事件(12w) ${c.n_events_12w}`);
+  lines.push(`   状态: indexed · 近4周 ${pct(c.index_4w)} · 近12周 ${pct(c.index_12w)} · 温度 ${TREND_TEMP_LABEL[c.temperature] ?? '—'} · 右侧 ${c.right_side_weeks} 周 · 事件(12w) ${c.n_events_12w}`);
   lines.push(`   覆盖: 实体 ×${c.coverage.entities} · 采集 ×${c.coverage.captures} 次 · ${c.coverage.first_capture} → ${c.coverage.last_capture}`);
   lines.push(`   周度指数（周 | 指数% | 幅度事件 | 供给事件）:`);
   for (const w of c.weekly) {
@@ -78,7 +77,7 @@ function renderPoolCard(snap) {
   const p = snap.pool;
   const lines = [`🧺 关注池读数 · ${p.n_communities} 个已索引小区（ADR-0003 聚合封顶：无城市级）`];
   lines.push(`   as_of ${snap.as_of} · 校准徽章 ${snap.calibration?.badge ?? 'uncalibrated'}`);
-  lines.push(`   近4周 ${pct(p.index_4w)} · 近12周 ${pct(p.index_12w)} · 温度 ${TEMP_LABEL[p.temperature] ?? '—'} · 右侧 ${p.right_side_weeks} 周`);
+  lines.push(`   近4周 ${pct(p.index_4w)} · 近12周 ${pct(p.index_12w)} · 温度 ${TREND_TEMP_LABEL[p.temperature] ?? '—'} · 右侧 ${p.right_side_weeks} 周`);
   lines.push(`   周度指数（周 | 指数% | 幅度事件 | 供给事件）:`);
   for (const w of p.weekly) {
     lines.push(`     ${w.week} | ${w.index == null ? '—' : `${w.index > 0 ? '+' : ''}${w.index}`} | ${w.n_events} | ${w.supply_events}`);
@@ -103,11 +102,11 @@ if (cmd === 'build') {
   console.log(`✅ 快照已写入 ${file}（schema ${TREND_SCHEMA}）`);
   for (const [key, c] of Object.entries(snap.communities)) {
     const head = c.status === 'indexed'
-      ? `近4周 ${pct(c.index_4w)} · 近12周 ${pct(c.index_12w)} · ${TEMP_LABEL[c.temperature] ?? '—'} · 事件(12w) ${c.n_events_12w}`
+      ? `近4周 ${pct(c.index_4w)} · 近12周 ${pct(c.index_12w)} · ${TREND_TEMP_LABEL[c.temperature] ?? '—'} · 事件(12w) ${c.n_events_12w}`
       : `not_enough_data（实体 ×${c.coverage.entities} · 采集 ×${c.coverage.captures}）`;
     console.log(`  · ${c.display}${c.district ? `（${c.district}）` : ''} — ${head}`);
   }
-  if (snap.pool) console.log(`🧺 关注池（${snap.pool.n_communities} 个已索引小区）— 近4周 ${pct(snap.pool.index_4w)} · 近12周 ${pct(snap.pool.index_12w)} · ${TEMP_LABEL[snap.pool.temperature] ?? '—'}`);
+  if (snap.pool) console.log(`🧺 关注池（${snap.pool.n_communities} 个已索引小区）— 近4周 ${pct(snap.pool.index_4w)} · 近12周 ${pct(snap.pool.index_12w)} · ${TREND_TEMP_LABEL[snap.pool.temperature] ?? '—'}`);
   else console.log('🧺 关注池——暂无已索引小区（全部 not_enough_data）');
   const dists = Object.keys(snap.districts);
   console.log(dists.length ? `🏘 板块级（≥${snap.constants.min_district_communities} 小区才输出）：${dists.join('，')}` : `🏘 板块级——已索引小区未达同板块 ≥${snap.constants.min_district_communities} 个门槛，不输出`);

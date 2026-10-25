@@ -11,10 +11,11 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { collectReports, parseWatchlist, effectiveProvenance, num } from './lib/data.mjs';
+import { collectReports, parseWatchlist, effectiveProvenance, num, loadTrendSnapshot } from './lib/data.mjs';
 import { parseProfile } from './lib/profile.mjs';
 import { loadGeoCache } from './lib/geo.mjs';
 import { decide, isUserExcluded } from './lib/decision.mjs';
+import { normCommunity } from './lib/trend.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,11 +65,21 @@ async function loadFullData() {
     geoCache = await loadGeoCache(join(ROOT, 'data', '.geo-cache.json'));
   }
 
-  const [reports, watchlist, rawProfile] = await Promise.all([
+  const [reports, watchlist, rawProfile, trendInfo] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
     readFile(PROFILE_PATH, 'utf8').catch(() => ''),
+    // 趋势快照（第三数据源，ADR-0003/0004）：缺失/过期由消费端降级展示，不崩溃
+    loadTrendSnapshot(join(ROOT, 'data', 'trend')),
   ]);
+  // 小区级趋势字段（仅 indexed 小区），按归一化小区名挂到房源上；快照元数据整体透传
+  const trendByComm = new Map(Object.entries(trendInfo?.snapshot?.communities ?? {})
+    .filter(([, c]) => c.status === 'indexed')
+    .map(([k, c]) => [k, { temp: c.temperature ?? null, right: c.right_side_weeks ?? null, events: c.n_events_12w ?? null }]));
+  const trendMeta = trendInfo ? {
+    as_of: trendInfo.date, stale: trendInfo.stale,
+    badge: trendInfo.snapshot.calibration?.badge ?? 'uncalibrated',
+  } : null;
 
   const parsedProfile = parseProfile(rawProfile);
 
@@ -82,6 +93,7 @@ async function loadFullData() {
       const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
       const wScore = w ? num(w.score) : null;
       const note = w ? w.note : '';
+      const t = trendByComm.get(normCommunity(r.community)) ?? null;
       return {
         ...r,
         coords,
@@ -90,6 +102,9 @@ async function loadFullData() {
         watchlist_note: note,
         user_excluded: isUserExcluded(note),
         authenticity: effectiveProvenance(r, w),
+        trend_temp: t?.temp ?? null,
+        trend_right: t?.right ?? null,
+        trend_events: t?.events ?? null,
       };
     })
     // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染
@@ -98,6 +113,7 @@ async function loadFullData() {
   return {
     reports: mergedReports,
     watchlist: watchlist || [],
+    trendMeta,
     // 工作锚点由画像驱动（buyer.work_location_coords = [经度, 纬度]，intake 采集或地图页写入）；
     // 未设置时地图不绘制锚点与通勤圈，不内置任何默认位置
     workAnchor: {
