@@ -28,6 +28,7 @@ import {
   TREND_SCHEMA, isoWeek, normCommunity, trendEligibleRecords, groupByCommunity,
   extractCommunityEvents, weeklyIndex, cumulativeIndex, nEventsWindow, temperatureOf,
   rightSideWeeks, buildSnapshot, collectAnchors, cumulativeBetween, calibrate, badgeOf,
+  fairPriceBand,
 } from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -392,6 +393,24 @@ const tRec = (platform, id, date, unit, over = {}) => ({
   const d = snap2.districts['浦东·板块测试'];
   has('板块 ≥3 正向门槛（3 个已索引小区 → 输出板块块）', !!d && d.n_communities === 3 && d.index_4w != null);
   eq('板块内小区全部进入关注池（等权）', snap2.pool.n_communities, 3);
+}
+
+// ---------- 合理价区间（T6 #20：锚点 × 趋势封顶调整 ± 个别因素；退回规则显式） ----------
+
+{
+  eq('区间算术（50000 × (1-2.2%) ± 2%）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: -2.2, factor_pct: 2 }),
+    { ok: true, anchor_value: 50000, anchor_n: 5, index_12w: -2.2, trend_adj_pct: -2.2, factor_pct: 2, center: 48900, low: 47922, high: 49878 });
+  eq('趋势上调封顶 +5%', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 9 }).center, 52500);
+  eq('趋势下调封顶 -5%', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: -9 }).center, 47500);
+  eq('个别因素钳到 [0,5]', [fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0, factor_pct: 12 }).factor_pct,
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0, factor_pct: -3 }).factor_pct], [5, 0]);
+  eq('锚点样本 n=5 边界可出区间', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0 }).ok, true);
+  eq('锚点样本 n=4 → 退回（thin_anchor）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 4, index_12w: 0 }), { ok: false, reason: 'thin_anchor', anchor_n: 4, min: 5 });
+  eq('指数缺失 → 退回（no_index）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: null }), { ok: false, reason: 'no_index', anchor_n: 5 });
+  eq('锚点值无效 → invalid_anchor', fairPriceBand({ anchor_value: 0, anchor_n: 5, index_12w: 0 }).reason, 'invalid_anchor');
 }
 
 // ---------- 真实性三态（ADR-0002 备注标记解析） ----------

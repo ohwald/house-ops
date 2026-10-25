@@ -32,6 +32,9 @@ export const TREND_CONSTANTS = Object.freeze({
   calibration_refute_rate: 0.4, // refuted 门槛：命中率 < 40%（信号停止可引用）
   calibration_flat_pct: 0.5,   // 锚点变动 |Δ| < 0.5% 视为平坦，不参与方向评分
   calibration_index_flat_pct: 0.05, // 指数窗口累计 |累计| < 0.05% 视为平坦，不参与方向评分
+  band_trend_clamp_pct: 5,     // 合理价区间的趋势调整封顶 ±5%（防热指数喧宾夺主）
+  band_max_factor_pct: 5,      // 个别因素调整上限（评估的硬伤/楼层/朝向，0-5%）
+  band_min_anchor_samples: 5,  // 锚点样本 <5 → 不出区间，退回 crosscheck 并明示
 });
 
 // ---------- 基础工具 ----------
@@ -332,6 +335,29 @@ export function calibrate(anchorsByCommunity, communitiesWeekly, { constants = T
   }
   const hitRate = n ? Math.round((hits / n) * 1000) / 1000 : null;
   return { n, hits, hit_rate: hitRate, badge: badgeOf(n, hitRate, { constants }), excluded, comparisons };
+}
+
+// ---------- 合理价区间（T6：成交锚点 × 趋势有限调整 ± 个别因素；叠加不替换 crosscheck） ----------
+
+// 输入全部显式传入（无隐藏默认）。锚点值与返回值同单位（建议单价口径 元/㎡）。
+// 退回规则：锚点样本 <5 或指数 not_enough_data → ok:false + reason，调用方必须明示退回 crosscheck 口径。
+export function fairPriceBand({ anchor_value, anchor_n, index_12w, factor_pct = 0, constants = TREND_CONSTANTS } = {}) {
+  const a = Number(anchor_value), n = Number(anchor_n);
+  if (!Number.isFinite(a) || a <= 0 || !Number.isFinite(n)) return { ok: false, reason: 'invalid_anchor' };
+  if (n < constants.band_min_anchor_samples) return { ok: false, reason: 'thin_anchor', anchor_n: n, min: constants.band_min_anchor_samples };
+  // 注意 Number(null)===0：指数缺失必须显式判 null/undefined，否则会被当成 0% 硬造区间
+  if (index_12w == null || !Number.isFinite(Number(index_12w))) return { ok: false, reason: 'no_index', anchor_n: n };
+  const idx = Number(index_12w);
+  const f = Math.min(Math.max(Number(factor_pct) || 0, 0), constants.band_max_factor_pct);
+  const adj = Math.min(Math.max(idx, -constants.band_trend_clamp_pct), constants.band_trend_clamp_pct);
+  const center = a * (1 + adj / 100);
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return {
+    ok: true,
+    anchor_value: a, anchor_n: n, index_12w: idx,
+    trend_adj_pct: round1(adj), factor_pct: round1(f),
+    center: r2(center), low: r2(center * (1 - f / 100)), high: r2(center * (1 + f / 100)),
+  };
 }
 
 // ---------- 快照组装（build 的唯一纯函数入口） ----------

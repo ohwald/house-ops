@@ -191,6 +191,7 @@
 node scripts/trend.mjs build [--corpus <dir>] [--out <dir>] [--today YYYY-MM-DD]  # 重算并落快照 data/trend/index-{date}.json（追加式）
 node scripts/trend.mjs show <小区关键词 | --pool> [--dir <dir>]                   # 读最新快照出读数卡
 node scripts/trend.mjs backtest [--corpus <dir>]                                  # 校准回测：锚点方向 vs 指数方向比较表
+node scripts/trend.mjs band --anchor <锚点值> --samples <n> --index <index_12w> [--factor 0-5]  # 合理价区间（evaluate/negotiate 消费）
 ```
 
 **校准回测**：同一小区两个时点的「成交数据」档锚点（来自 crosscheck）构成一对方向比较——锚点变动方向 vs 窗口内指数方向，同向记命中。命中率 ≥60%（≥10 次）徽章升 `calibrated`，<40% 降 `refuted`（信号停止可引用）；档位不足/无指数重叠/幅度平坦的比较**显式计入排除**，不静默丢弃。锚点稀缺是常态，长期 `uncalibrated` 是系统在工作，不是故障。
@@ -223,6 +224,9 @@ node scripts/trend.mjs backtest [--corpus <dir>]                                
 | calibration_refute_rate=0.4 | refuted 命中率门槛（<） |
 | calibration_flat_pct=0.5 | 锚点变动 |Δ| 低于此幅度（%）视为平坦，不参与方向评分 |
 | calibration_index_flat_pct=0.05 | 指数窗口累计 |累计| 低于此幅度（%）视为平坦，不参与方向评分 |
+| band_trend_clamp_pct=5 | 合理价区间的趋势调整封顶（±%） |
+| band_max_factor_pct=5 | 个别因素调整上限（%） |
+| band_min_anchor_samples=5 | 锚点样本低于此数不出区间，退回 crosscheck 并明示 |
 
 ## 分类分析引擎（analysis.mjs + `scan.mjs analyze`）
 

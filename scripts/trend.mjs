@@ -7,11 +7,13 @@
 //     读最新快照输出读数卡（周事件 <3 的小区如实标 not_enough_data）
 //   node scripts/trend.mjs backtest [--corpus <dir>] [--today YYYY-MM-DD]
 //     校准回测：成交锚点方向 vs 指数方向的比较表（评分/排除显式计数），纯只读不落盘
+//   node scripts/trend.mjs band --anchor <锚点值> --samples <n> --index <index_12w> [--factor 0-5] [--badge <徽章>]
+//     合理价区间：锚点 × (1 + clamp(指数, ±5%)) ± 个别因素；锚点稀薄/指数缺失时明示退回 crosscheck
 
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSnapshot, collectAnchors, calibrate, normCommunity, TREND_SCHEMA, TREND_CONSTANTS } from './lib/trend.mjs';
+import { buildSnapshot, collectAnchors, calibrate, fairPriceBand, normCommunity, TREND_SCHEMA, TREND_CONSTANTS } from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -133,6 +135,30 @@ if (cmd === 'build') {
     console.log(`   ${c.display} | ${c.from} → ${c.to} | 锚点 ${pct(c.anchor_delta_pct)} [${c.tier}] | 指数 ${pct(c.index_cum_pct)} | ${c.result}`);
   }
   if (!r.comparisons.length) console.log('   （暂无比较——评分需要同一小区两个时点的「成交数据」档锚点；锚点稀缺是常态，uncalibrated 是系统在工作）');
+} else if (cmd === 'band') {
+  const reqNum = (name) => {
+    const raw = flag(name);
+    const x = raw == null ? NaN : Number(raw);
+    if (!Number.isFinite(x)) { console.error(`⛔ --${name} 需要数字（用法见文件头注释）`); process.exit(1); }
+    return x;
+  };
+  const idxRaw = flag('index');
+  const badge = flag('badge') ?? 'uncalibrated';
+  const b = fairPriceBand({
+    anchor_value: reqNum('anchor'),
+    anchor_n: reqNum('samples'),
+    index_12w: idxRaw == null ? NaN : Number(idxRaw),
+    factor_pct: flag('factor') == null ? 0 : Number(flag('factor')),
+  });
+  if (!b.ok) {
+    const why = b.reason === 'thin_anchor' ? `锚点样本 ${b.anchor_n} < ${b.min}——区间不可信`
+      : b.reason === 'no_index' ? '趋势指数 not_enough_data（周事件 <3）' : '锚点值无效';
+    console.log(`⛔ 不出区间（${why}）——退回 crosscheck 结论并在报告/话术中明示，不硬造区间。`);
+    process.exit(0);
+  }
+  console.log(`🎯 合理价区间 · 锚点 ${b.anchor_value}（n=${b.anchor_n}）· 趋势调整 ${pct(b.trend_adj_pct)}（近12周 ${pct(b.index_12w)}，封顶 ±5%）· 个别因素 ±${b.factor_pct}%`);
+  console.log(`   中枢 ${b.center} · 区间 [${b.low}, ${b.high}]（与锚点同单位，建议单价口径 元/㎡）`);
+  console.log(`   校准徽章 ${badge}——negotiate 引用区间时必须携带；本区间叠加在 crosscheck 结论之上，不替换。`);
 } else if (cmd === 'show') {
   const keyword = positional[0];
   const dir = flag('dir', join(ROOT, 'data', 'trend'));
@@ -161,6 +187,6 @@ if (cmd === 'build') {
     for (const [, c] of hit) console.log(renderCard(c, snap));
   }
 } else {
-  console.error('用法: node scripts/trend.mjs <build|show|backtest> …（详见本文件头注释与 modes/scan.md）');
+  console.error('用法: node scripts/trend.mjs <build|show|backtest|band> …（详见本文件头注释与 modes/scan.md）');
   process.exit(1);
 }
