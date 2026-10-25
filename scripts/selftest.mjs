@@ -16,7 +16,7 @@ import {
 } from '../scrapers/_fields.mjs';
 import { groupDetections, overBudgetWarning } from './lib/detect.mjs';
 import { checkGranularity, readOfficialSources, filterSources } from './lib/official-sources.mjs';
-import { authenticityFromNote, effectiveProvenance } from './lib/data.mjs';
+import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTrendSnapshot } from './lib/data.mjs';
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
@@ -428,6 +428,25 @@ eq('watchRow legacy 不静默升档', effectiveProvenance({ provenance: 'verifie
 eq('无行回落报告 suspect', effectiveProvenance({ provenance: 'suspect' }, null), 'suspect');
 eq('无行无标记 → legacy（旧实现曾折叠为 verified）', effectiveProvenance({}, null), 'legacy');
 eq('无行报告 void 直通', effectiveProvenance({ provenance: 'void' }, null), 'void');
+
+// ---------- Machine Summary trend 子块（T7 #21：context 层，两处同步的另一半） ----------
+
+{
+  const withTrend = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "013"\ncommunity: 示范小区\nscore_global: 4.1\ntrend:\n  index_4w: -1.2\n  index_12w: -3.4\n  temperature: cold\n  right_side_weeks: 0\n  n_events_12w: 23\n  calibrated: uncalibrated\n  as_of: "2026-10-25"\n  source: "data/trend/index-2026-10-25.json"\nnext_action: 约看\n```');
+  eq('trend 子块解析（数值/字符串/嵌套）', withTrend.trend, {
+    index_4w: -1.2, index_12w: -3.4, temperature: 'cold', right_side_weeks: 0,
+    n_events_12w: 23, calibrated: 'uncalibrated', as_of: '2026-10-25', source: 'data/trend/index-2026-10-25.json',
+  });
+  eq('trend 之后的顶层键不被吞掉', withTrend.next_action, '约看');
+  const legacy = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "001"\nscore_global: 3.9\nunverified_items: []\n```');
+  eq('legacy 报告无 trend 键 → 合法（可选兼容）', 'trend' in legacy, false);
+  eq('legacy 平铺键解析不受影响', [legacy.score_global, Array.isArray(legacy.unverified_items)], [3.9, true]);
+  const broken = parseMachineSummary('## Machine Summary\n```yaml\ntrend:\nindex_4w: -1\nscore_global: 4\n```');
+  eq('未缩进的 trend 块不误吞顶层键（容错）', [broken.trend, broken.score_global], [{}, 4]);
+}
+
+// loadTrendSnapshot：CI 无用户数据 → 目录不存在返回 null（stats 冒烟依赖此路径）
+eq('loadTrendSnapshot 缺目录 → null（不崩溃）', await loadTrendSnapshot(join(ROOT, 'data', 'trend-not-exist')), null);
 
 // ---------- 决策分层唯一实现（decision.mjs：四档 pill / 状态标签 / 标记档） ----------
 

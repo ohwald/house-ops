@@ -16,29 +16,44 @@ export function num(s) {
 
 // ---------- Machine Summary（评估报告） ----------
 
+// 标量行级解析（`key: value`）：null/空、布尔、数字、数组、去引号
+function parseScalar(v) {
+  if (v === 'null' || v === '') return null;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (v.startsWith('[') && v.endsWith(']')) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+  }
+  return v.replace(/^["']|["']$/g, '');
+}
+
 export function parseMachineSummary(text) {
   const start = text.indexOf('## Machine Summary');
   if (start === -1) return null;
   const fence = /```ya?ml\n([\s\S]*?)```/.exec(text.slice(start));
   if (!fence) return null;
   const obj = {};
+  let trend = null; // trend 子块（context 层，ADR-0004）：`trend:` 后缩进两格的键；去缩进即结束
   for (const line of fence[1].split('\n')) {
+    if (/^trend:\s*$/.test(line)) {
+      trend = {};
+      obj.trend = trend;
+      continue;
+    }
+    if (trend != null) {
+      const t = /^\s{2,}(\w+):\s*(.*?)\s*$/.exec(line);
+      if (t) { trend[t[1]] = parseScalar(t[2]); continue; }
+      if (line.trim() === '') continue;
+      trend = null; // 顶层行 → 子块结束
+    }
     const m = /^(\w+):\s*(.*?)\s*$/.exec(line);
     if (!m) continue;
-    let v = m[2];
-    if (v === 'null' || v === '') v = null;
-    else if (v === 'true') v = true;
-    else if (v === 'false') v = false;
-    else if (/^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
-    else if (v.startsWith('[') && v.endsWith(']')) {
-      try {
-        v = JSON.parse(v);
-      } catch {
-        v = v.slice(1, -1).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-      }
-    }
-    else v = v.replace(/^["']|["']$/g, '');
-    obj[m[1]] = v;
+    obj[m[1]] = parseScalar(m[2]);
   }
   return obj;
 }
@@ -57,6 +72,26 @@ export async function collectReports(reportsDir, { includeVoid = false } = {}) {
     if (ms) rows.push({ file: f, provenance: 'legacy', ...ms });
   }
   return includeVoid ? rows : rows.filter(r => r.provenance !== 'void');
+}
+
+// ---------- 趋势快照（data/trend/，house-ops.trend/1；第三数据源，ADR-0003/0004） ----------
+
+// 读最新快照（≤ today 的最大日期）；目录不存在/无快照/坏 JSON → null（消费方按"无趋势"降级，不崩溃）。
+// stale 按 14 天实采时效口径（与 scan.mjs history 一致）。
+export async function loadTrendSnapshot(trendDir, { staleDays = 14, today = null } = {}) {
+  const files = (await readdir(trendDir).catch(() => [])).filter(f => /^index-\d{4}-\d{2}-\d{2}\.json$/.test(f));
+  const dates = files.map(f => f.slice(6, 16)).filter(d => !today || d <= today).sort();
+  if (!dates.length) return null;
+  const date = dates[dates.length - 1];
+  let snapshot;
+  try {
+    snapshot = JSON.parse(await readFile(join(trendDir, `index-${date}.json`), 'utf8'));
+  } catch {
+    return null;
+  }
+  const now = today ?? new Date().toISOString().slice(0, 10);
+  const ageDays = Math.max(0, Math.round((new Date(now) - new Date(date)) / 86400000));
+  return { snapshot, date, age_days: ageDays, stale: ageDays > staleDays };
 }
 
 // ---------- Watchlist（markdown 表格） ----------

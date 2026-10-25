@@ -14,6 +14,7 @@ import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSnapshot, collectAnchors, calibrate, fairPriceBand, normCommunity, TREND_SCHEMA, TREND_CONSTANTS } from './lib/trend.mjs';
+import { loadTrendSnapshot } from './lib/data.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -47,15 +48,6 @@ async function loadCorpus(dir) {
     catch { console.error(`⚠️  跳过无法解析的扫描记录: ${f}`); }
   }
   return records;
-}
-
-// 最新快照：目录下 index-YYYY-MM-DD.json 取 ≤ today 的最大日期
-async function latestSnapshot(dir, today) {
-  const files = (await readdir(dir).catch(() => [])).filter((f) => /^index-\d{4}-\d{2}-\d{2}\.json$/.test(f));
-  const dates = files.map((f) => f.slice(6, 16)).filter((d) => !today || d <= today).sort();
-  if (!dates.length) return null;
-  const d = dates[dates.length - 1];
-  return { date: d, snap: JSON.parse(await readFile(join(dir, `index-${d}.json`), 'utf8')) };
 }
 
 const TEMP_LABEL = { cold: '冷', mild: '温', hot: '热', stalling: '失速' };
@@ -167,12 +159,12 @@ if (cmd === 'build') {
     console.error('用法: node scripts/trend.mjs show <小区关键词 | --pool>（先跑 build 生成快照）');
     process.exit(1);
   }
-  const found = await latestSnapshot(dir, today);
+  const found = await loadTrendSnapshot(dir, { today });
   if (!found) {
     console.log(`📭 ${dir} 下还没有趋势快照——先跑 node scripts/trend.mjs build。`);
     process.exit(0);
   }
-  const { snap } = found;
+  const { snapshot: snap } = found;
   if (rest.includes('--pool')) {
     console.log(snap.pool ? renderPoolCard(snap) : '🧺 关注池——暂无已索引小区（全部 not_enough_data），先按周复扫积累事件。');
     process.exit(0);

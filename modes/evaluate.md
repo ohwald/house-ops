@@ -150,6 +150,16 @@ urban_planning: ""   # positive(有规划红利) | neutral(现状平稳) | uncer
 tradeoff_summary: "" # 核心得失与方案权衡一句话总结
 unverified_items: []
 next_action: ""
+# 以下 trend 块为可选 context 层（ADR-0004：不参与六维评分）；无趋势快照或小区未索引时整块省略
+trend:
+  index_4w: null       # 近4周盘口指数累计 %
+  index_12w: null      # 近12周累计 %
+  temperature: ""      # cold | mild | hot | stalling（快照 communities.<小区>.temperature）
+  right_side_weeks: null
+  n_events_12w: null   # 样本透明：事件数
+  calibrated: ""       # uncalibrated | calibrated | refuted（快照 calibration.badge）
+  as_of: ""
+  source: ""           # data/trend/index-YYYY-MM-DD.json
 ```
 
 ## Post-evaluation
