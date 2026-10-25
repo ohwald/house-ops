@@ -189,8 +189,11 @@
 
 ```bash
 node scripts/trend.mjs build [--corpus <dir>] [--out <dir>] [--today YYYY-MM-DD]  # 重算并落快照 data/trend/index-{date}.json（追加式）
-node scripts/trend.mjs show <小区关键词> [--dir <dir>]                            # 读最新快照出读数卡
+node scripts/trend.mjs show <小区关键词 | --pool> [--dir <dir>]                   # 读最新快照出读数卡
+node scripts/trend.mjs backtest [--corpus <dir>]                                  # 校准回测：锚点方向 vs 指数方向比较表
 ```
+
+**校准回测**：同一小区两个时点的「成交数据」档锚点（来自 crosscheck）构成一对方向比较——锚点变动方向 vs 窗口内指数方向，同向记命中。命中率 ≥60%（≥10 次）徽章升 `calibrated`，<40% 降 `refuted`（信号停止可引用）；档位不足/无指数重叠/幅度平坦的比较**显式计入排除**，不静默丢弃。锚点稀缺是常态，长期 `uncalibrated` 是系统在工作，不是故障。
 
 口径（SoT：`GLOSSARY.md` 趋势与价格推测节 + ADR-0003/0004）：
 
@@ -215,6 +218,10 @@ node scripts/trend.mjs show <小区关键词> [--dir <dir>]                     
 | stalling_monthly_pct=-1.5 | 失速档阈值（近 4 周累计 ≤ 此值） |
 | hot_threshold_pct=0.8 | 热档阈值（近 4 周累计 ≥ 此值） |
 | right_side_trigger_pct=0.8 | 右侧确认的连续同向累计幅度阈值 |
+| calibration_min_comparisons=10 | 校准徽章升 calibrated 的最少方向比较次数 |
+| calibration_hit_rate=0.6 | calibrated 命中率门槛（≥） |
+| calibration_refute_rate=0.4 | refuted 命中率门槛（<） |
+| calibration_flat_pct=0.5 | 锚点变动 |Δ| 低于此幅度（%）视为平坦，不参与方向评分 |
 
 ## 分类分析引擎（analysis.mjs + `scan.mjs analyze`）
 

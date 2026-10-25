@@ -195,6 +195,7 @@ Weekly community-level index from order-book marginal events: price changes, new
 ```bash
 node scripts/trend.mjs build                  # recompute weekly indices → data/trend/index-{date}.json (append-only)
 node scripts/trend.mjs show <community>       # readout card: 4w/12w cumulative, temperature, right-side weeks, events
+node scripts/trend.mjs backtest               # calibration: anchor-direction vs index-direction comparison table
 ```
 
 ### Physical inference (`scripts/insight.mjs`)
@@ -542,6 +543,7 @@ node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性判�
 ```bash
 node scripts/trend.mjs build                  # 重算周度指数 → data/trend/index-{date}.json（追加式）
 node scripts/trend.mjs show <小区关键词>       # 读数卡：近4/12周累计、温度、右侧周数、事件数
+node scripts/trend.mjs backtest               # 校准回测：锚点方向 vs 指数方向比较表
 ```
 
 ### 物理推算（`scripts/insight.mjs`）

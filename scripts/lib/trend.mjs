@@ -27,6 +27,10 @@ export const TREND_CONSTANTS = Object.freeze({
   stalling_monthly_pct: -1.5,  // 失速档：近 4 周累计 ≤ -1.5%（播客口径：单月跌 1.5%+ = 加速下跌）
   hot_threshold_pct: 0.8,      // 热档：近 4 周累计 ≥ +0.8%
   right_side_trigger_pct: 0.8, // 右侧确认：连续同向周累计 |幅度| ≥ 0.8%（初值，待回测校准）
+  calibration_min_comparisons: 10, // 校准徽章升 calibrated 的最少方向比较次数
+  calibration_hit_rate: 0.6,   // calibrated 门槛：命中率 ≥ 60%
+  calibration_refute_rate: 0.4, // refuted 门槛：命中率 < 40%（信号停止可引用）
+  calibration_flat_pct: 0.5,   // 锚点变动 |Δ| < 0.5% 视为平坦，不参与方向评分
 });
 
 // ---------- 基础工具 ----------
@@ -242,6 +246,92 @@ function aggregateWeekly(items) {
   }));
 }
 
+// ---------- 校准回测（锚点只验方向，不进指数；ADR-0004） ----------
+
+// 从合格扫描记录提取各小区锚点序列。锚点值 = 挂牌价 / (1 + listing_vs_anchor_pct/100)
+// ——crosscheck 未存锚点原值，可精确反推；date 取 scanned_at（锚点是扫描时点可见成交的中位数，as_of 语义）。
+export function collectAnchors(records) {
+  const byCommunity = new Map();
+  for (const rec of trendEligibleRecords(records)) {
+    const c = rec?.crosscheck;
+    if (!c?.anchor || c.verdict === 'not_enough_data') continue;
+    const pct = c.listing_vs_anchor_pct;
+    if (!Number.isFinite(pct) || pct <= -100) continue;
+    const L = rec.listing ?? {};
+    const listingVal = Number.isFinite(L.unit_price) && L.unit_price > 0 ? L.unit_price
+      : Number.isFinite(L.total_price_wan) && L.total_price_wan > 0 ? L.total_price_wan : null;
+    if (listingVal == null) continue;
+    const key = normCommunity(rec.community);
+    if (!key) continue;
+    if (!byCommunity.has(key)) byCommunity.set(key, []);
+    byCommunity.get(key).push({
+      date: String(rec.scanned_at ?? ''),
+      value: Math.round((listingVal / (1 + pct / 100)) * 100) / 100,
+      tier: c.anchor.tier ?? '未核实',
+      n_samples: c.anchor.n_samples ?? null,
+      listing_key: `${rec.platform ?? ''}:${rec.listing_id ?? rec.url ?? ''}`,
+      display: rec.community,
+    });
+  }
+  for (const list of byCommunity.values()) list.sort((a, b) => a.date.localeCompare(b.date) || a.listing_key.localeCompare(b.listing_key));
+  return byCommunity;
+}
+
+// 校准窗口累计（未加权）：monday ∈ (from, to] 的非空周指数之和；窗口无非空周 → null
+export function cumulativeBetween(weekly, fromDate, toDate) {
+  let sum = 0, used = 0;
+  for (const w of weekly ?? []) {
+    if (w.index == null) continue;
+    const mon = w.monday ?? mondayOfLabel(w.week);
+    if (mon > fromDate && mon <= toDate) { sum += w.index; used++; }
+  }
+  return used ? round1(sum) : null;
+}
+
+// 徽章三态：<min 次一律 uncalibrated（数据不足 ≠ 通过）；≥min 且命中率 ≥60% → calibrated；
+// 命中率 <40% → refuted（信号停止可引用）；中间带 → uncalibrated（还没资格说自己准）
+export function badgeOf(n, hitRate, { constants = TREND_CONSTANTS } = {}) {
+  if (n < constants.calibration_min_comparisons || hitRate == null) return 'uncalibrated';
+  if (hitRate >= constants.calibration_hit_rate) return 'calibrated';
+  if (hitRate < constants.calibration_refute_rate) return 'refuted';
+  return 'uncalibrated';
+}
+
+// 方向比较：同小区相邻锚点对，只有「成交数据」档参与评分（其余显式计入排除，不静默丢弃）。
+// 锚点变动方向 vs 窗口 (a0.date, a1.date] 内指数方向；平坦（|Δ锚点| 或 |指数| 过小）不评分。
+export function calibrate(anchorsByCommunity, communitiesWeekly, { constants = TREND_CONSTANTS } = {}) {
+  const comparisons = [];
+  const excluded = { low_tier: 0, no_overlap: 0, flat: 0 };
+  let hits = 0, n = 0;
+  const weeklyOf = (key) => (communitiesWeekly instanceof Map
+    ? communitiesWeekly.get(key)?.weekly : communitiesWeekly?.[key]?.weekly) ?? [];
+  for (const [key, anchors] of anchorsByCommunity ?? []) {
+    const weekly = weeklyOf(key);
+    const scored = anchors.filter((a) => a.tier === '成交数据');
+    excluded.low_tier += anchors.length - scored.length;
+    for (let i = 1; i < scored.length; i++) {
+      const a0 = scored[i - 1], a1 = scored[i];
+      if (!(a0.value > 0)) continue;
+      const anchorDelta = round1(((a1.value - a0.value) / a0.value) * 100);
+      const cum = cumulativeBetween(weekly, a0.date, a1.date);
+      const base = {
+        community: key, display: a0.display, from: a0.date, to: a1.date,
+        tier: a1.tier, anchor_delta_pct: anchorDelta, index_cum_pct: cum,
+      };
+      if (cum == null) { excluded.no_overlap++; comparisons.push({ ...base, result: 'excluded:no_overlap' }); continue; }
+      if (Math.abs(anchorDelta) < constants.calibration_flat_pct || Math.abs(cum) < 0.05) {
+        excluded.flat++; comparisons.push({ ...base, result: 'excluded:flat' }); continue;
+      }
+      const hit = anchorDelta > 0 === cum > 0;
+      if (hit) hits++;
+      n++;
+      comparisons.push({ ...base, result: hit ? 'hit' : 'miss' });
+    }
+  }
+  const hitRate = n ? Math.round((hits / n) * 1000) / 1000 : null;
+  return { n, hits, hit_rate: hitRate, badge: badgeOf(n, hitRate, { constants }), excluded, comparisons };
+}
+
 // ---------- 快照组装（build 的唯一纯函数入口） ----------
 
 export function buildSnapshot(records, { today = null, constants = TREND_CONSTANTS } = {}) {
@@ -306,6 +396,7 @@ export function buildSnapshot(records, { today = null, constants = TREND_CONSTAN
     if (arr.length >= constants.min_district_communities) districts[name] = block(arr);
   }
 
+  const calib = calibrate(collectAnchors(records), communities, { constants });
   return {
     schema: TREND_SCHEMA,
     as_of: asOf,
@@ -313,6 +404,6 @@ export function buildSnapshot(records, { today = null, constants = TREND_CONSTAN
     communities,
     pool,
     districts,
-    calibration: { n: 0, hit_rate: null, badge: 'uncalibrated' }, // 校准回测（T5）起积累
+    calibration: { n: calib.n, hit_rate: calib.hit_rate, badge: calib.badge, excluded: calib.excluded },
   };
 }

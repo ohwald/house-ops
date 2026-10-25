@@ -5,11 +5,13 @@
 //     重算周度小区指数并落追加式快照（默认 data/scans → data/trend/index-{date}.json；同日重跑覆盖当日文件，不改历史文件）
 //   node scripts/trend.mjs show <小区关键词> [--dir <dir>] [--today YYYY-MM-DD]
 //     读最新快照输出读数卡（周事件 <3 的小区如实标 not_enough_data）
+//   node scripts/trend.mjs backtest [--corpus <dir>] [--today YYYY-MM-DD]
+//     校准回测：成交锚点方向 vs 指数方向的比较表（评分/排除显式计数），纯只读不落盘
 
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSnapshot, normCommunity, TREND_SCHEMA } from './lib/trend.mjs';
+import { buildSnapshot, collectAnchors, calibrate, normCommunity, TREND_SCHEMA } from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -99,6 +101,23 @@ if (cmd === 'build') {
   else console.log('🧺 关注池——暂无已索引小区（全部 not_enough_data）');
   const dists = Object.keys(snap.districts);
   console.log(dists.length ? `🏘 板块级（≥${snap.constants.min_district_communities} 小区才输出）：${dists.join('，')}` : `🏘 板块级——已索引小区未达同板块 ≥${snap.constants.min_district_communities} 个门槛，不输出`);
+} else if (cmd === 'backtest') {
+  const corpusDir = flag('corpus', join(ROOT, 'data', 'scans'));
+  const today = flag('today');
+  const records = await loadCorpus(corpusDir);
+  if (!records.length) {
+    console.log(`📭 ${corpusDir} 下没有扫描记录——校准回测需要含成交锚点（crosscheck）的扫描记录，先跑 scan 采集。`);
+    process.exit(0);
+  }
+  const snap = buildSnapshot(records, { today: today ?? undefined });
+  const r = calibrate(collectAnchors(records), snap.communities, { constants: snap.constants });
+  console.log(`🔬 校准回测 · as_of ${snap.as_of} · 徽章 ${r.badge}`);
+  console.log(`   评分比较 ${r.n} 次 · 命中 ${r.hits} · 命中率 ${r.hit_rate == null ? '—' : `${(r.hit_rate * 100).toFixed(1)}%`} · 排除：档位不足 ${r.excluded.low_tier} / 无指数重叠 ${r.excluded.no_overlap} / 幅度平坦 ${r.excluded.flat}`);
+  for (const c of r.comparisons) {
+    const fmt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
+    console.log(`   ${c.display} | ${c.from} → ${c.to} | 锚点 ${fmt(c.anchor_delta_pct)} [${c.tier}] | 指数 ${fmt(c.index_cum_pct)} | ${c.result}`);
+  }
+  if (!r.comparisons.length) console.log('   （暂无比较——评分需要同一小区两个时点的「成交数据」档锚点；锚点稀缺是常态，uncalibrated 是系统在工作）');
 } else if (cmd === 'show') {
   const keyword = positional[0];
   const dir = flag('dir', join(ROOT, 'data', 'trend'));
@@ -127,6 +146,6 @@ if (cmd === 'build') {
     for (const [key, c] of hit) console.log(renderCard(key, c, snap));
   }
 } else {
-  console.error('用法: node scripts/trend.mjs <build|show> …（详见本文件头注释与 modes/scan.md）');
+  console.error('用法: node scripts/trend.mjs <build|show|backtest> …（详见本文件头注释与 modes/scan.md）');
   process.exit(1);
 }
