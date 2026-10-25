@@ -182,3 +182,4 @@
 - 扫描记录（scan 模式）落 `data/scans/`，schema `house-ops.scan/1`（SoT：`modes/scan.md`）：不占报告编号、不登记 watchlist；evaluate / deep-dive / negotiate 引用扫描记录时必须带 as_of 与可靠度档位。
 - 扫描记录是**追加式历史**：同一房源多次扫描落多个日期戳文件，禁止覆盖/改写旧记录——价格、调价、带看的时间序列是分析房东定价策略的依据（`node scripts/scan.mjs history`）。用户间隔较久回来时（默认 >14 天，`modes/_custom.md` 可覆盖），scan/watchlist 模式须提示是否快速复扫在追踪房源；过期挂牌价不得当作当前价引用。
 - **房源实体按指纹关联**（小区+面积±0.6㎡+户型+总楼层+朝向+年代，`scan.mjs match`）：跨平台同源挂牌与下架重挂必须归并到同一实体历史下，禁止按挂牌 ID 孤立追踪——换平台重挂/多平台差价是房东常见策略（重定价/引流），系统要能看见。
+- **自动复扫是 fork 侧 opt-in 能力**（`templates/actions/rescan.example.yml` + `scripts/rescan.mjs`）：上游仓库无任何活工作流、默认手动节奏；fork 用户在私有 fork 自建采集，单次 ≤12 次抓取的限额是代码内硬约束（见 `docs/automated-rescan.md`）。

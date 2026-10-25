@@ -32,7 +32,7 @@ import {
   TREND_SCHEMA, isoWeek, normCommunity, trendEligibleRecords, groupByCommunity,
   extractCommunityEvents, weeklyIndex, cumulativeIndex, nEventsWindow, temperatureOf,
   rightSideWeeks, buildSnapshot, collectAnchors, cumulativeBetween, calibrate, badgeOf,
-  fairPriceBand,
+  fairPriceBand, attachTrendToHouses,
 } from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -189,6 +189,13 @@ const unitA = (platform, id, date, price) => ({
   eq('实体含两键', es[0].summary.listing_keys.sort().join('|'), 'beike:999888777|lianjia:107115820274');
   // 单价采集价差 null（继承 buildPriceHistory 语义）
   eq('实体单时点价差 null', buildEntityHistory([corpus[0]])[0].summary.price_delta_wan, null);
+
+  // null-fingerprint 组守卫（2026-10-26 实测崩溃：无 listing 的小区页/复扫记录先建 _fp:null 组，
+  // 之后的可指纹记录 find 时 touch g._fp.community 崩溃——修复后正确跳过 null 组）
+  const noFp = { platform: 'fang', listing_id: 'c9', community: '测试小区', district: '浦东', scanned_at: '2026-09-10', listing: {} };
+  const es2 = buildEntityHistory([noFp, corpus[0]]);
+  eq('null 指纹组不崩且不吞可指纹记录', es2.length, 2);
+  eq('null 指纹记录独立成组（unmatched）', es2.some((e) => e.entity_id.startsWith('unmatched~')), true);
 }
 
 // ---------- 趋势引擎（lib/trend.mjs golden：周度指数 / 温度 / 右侧 / 聚合） ----------
@@ -417,6 +424,19 @@ const tRec = (platform, id, date, unit, over = {}) => ({
   eq('锚点值无效 → invalid_anchor', fairPriceBand({ anchor_value: 0, anchor_n: 5, index_12w: 0 }).reason, 'invalid_anchor');
 }
 
+// ---------- 趋势挂载（T8 #22：新快照挂温度；缺失/过期 → 全 null，不拿旧读数冒充当前） ----------
+
+{
+  const rows = [{ community: '趋势测试小区', score_global: 4 }, { community: '别的小区', score_global: 3 }];
+  const fresh = { snapshot: { communities: { '趋势测试小区': { status: 'indexed', temperature: 'hot', right_side_weeks: 3, n_events_12w: 42 } } }, stale: false, date: '2026-10-19', age_days: 6 };
+  eq('新快照挂载（label 服务端预计算）', attachTrendToHouses(rows, fresh)[0],
+    { community: '趋势测试小区', score_global: 4, trend_temp: 'hot', trend_label: '热', trend_right: 3, trend_events: 42 });
+  eq('未索引小区 → 全 null', attachTrendToHouses(rows, fresh)[1].trend_temp, null);
+  const stale = { ...fresh, stale: true, age_days: 30 };
+  eq('过期快照 → 全 null（不冒充当前）', attachTrendToHouses(rows, stale).map((r) => r.trend_temp), [null, null]);
+  eq('无快照 → 全 null 不崩溃', attachTrendToHouses(rows, null).map((r) => r.trend_temp), [null, null]);
+}
+
 // ---------- 真实性三态（ADR-0002 备注标记解析） ----------
 
 eq('⛔ → void', authenticityFromNote('⛔ 报告作废：小区不存在'), 'void');
@@ -497,18 +517,18 @@ eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
       const want = decide(d);
       return ['tier', 'markerCls', 'tag', 'tagCls', 'risk'].every(k => d.decision[k] === want[k]);
     }), true);
-  // T8：DEMO 趋势字段与 TREND_TEMP_LABEL 语义一致（温度键合法、计数为数值或空），页面温度标签取自同一常量
+  // T8：DEMO 趋势字段与 TREND_TEMP_LABEL 语义一致（温度键合法、label 与 temp 配对、计数为数值或空）
   has('DEMO 趋势字段与温度标签表一致（防漂移）',
     DEMO_HOUSES.every(dh => dh.trend_temp == null || (
       !!TREND_TEMP_LABEL[dh.trend_temp]
+      && dh.trend_label === TREND_TEMP_LABEL[dh.trend_temp]
       && (dh.trend_right == null || typeof dh.trend_right === 'number')
       && (dh.trend_events == null || typeof dh.trend_events === 'number'))), true);
   const html = renderMapHtml({ initialData: { reports: [], watchlist: [], profile: null, rawYaml: '', geoCache: {} }, config: {} });
   eq('PROFILE_FIELDS 表单 id 全部存在于页面骨架',
     PROFILE_FIELDS.every(f => (Array.isArray(f.form) ? f.form : f.form ? [f.form] : []).every(id => html.includes(`id="${id}"`))), true);
   has('详情卡有盘口趋势行（m-trend-line）', html.includes('id="m-trend-line"'), true);
-  has('温度标签表注入页面（TREND_TEMP_LABEL 单一真源）',
-    html.includes('const TREND_TEMP_LABEL = {"cold":"冷","mild":"温","hot":"热","stalling":"失速"};'), true);
+  has('温度不再经页面查找表（label 服务端预计算，页面无 TREND_TEMP_LABEL）', !html.includes('TREND_TEMP_LABEL'), true);
 }
 
 // ---------- profile 契约（C4：键表驱动 parse/update 对称 + 往返 golden） ----------
@@ -847,7 +867,7 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   eq('计划器 kinds', plan.fetches.map((f) => f.kind).sort().join(','), 'community,listing');
   const plan15 = planRescan(Array.from({ length: 15 }, (_, i) => `https://sh.esf.fang.com/chushou/9_${i}.htm`), scrapers);
   eq('预算硬上限 12（超额显式计数）', [plan15.fetches.length, plan15.skipped_cap, plan15.cap], [12, 3, 12]);
-  eq('预算口径与 scan 同源（≤12）', RESCAN_BUDGET.max_fetches_per_call ?? RESCAN_BUDGET.max_fetches_per_run, 12);
+  eq('预算口径与 scan 同源（≤12）', RESCAN_BUDGET.max_fetches_per_run, 12);
   has('抓取节奏 = 下限 + 抖动', scheduleDelay({ minDelayMs: 100, jitterMs: 50, rng: () => 0.5 }) === 125);
 
   const rec = buildRecord('listing', exL, { url: 'https://sh.esf.fang.com/chushou/8_1020829729.htm', listingId: '8_1020829729', today: '2026-10-26' });
@@ -982,7 +1002,7 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   for (const field of [
     'h.community', 'h.report_no', 'h.district', 'h.type', 'h.score_global',
     'h.total_price_wan', 'h.unit_price', 'h.area_sqm', 'h.built_year', 'h.policy_tax_wan',
-    'd.tag', 'd.tagCls', 'subBits',
+    'd.tag', 'd.tagCls', 'subBits', 'h.trend_label',
   ]) {
     const fieldRe = new RegExp(`\\b${field.replace(/\./g, '\\.')}\\b`);
     const bad = dataInterps.filter(e => fieldRe.test(e) && !e.includes(`esc(${field}`));

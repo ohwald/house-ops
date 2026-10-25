@@ -40,6 +40,30 @@ export const TREND_CONSTANTS = Object.freeze({
 // 温度中文标签（唯一实现；CLI 读数卡与地图页共用，避免两处手抄漂移）
 export const TREND_TEMP_LABEL = Object.freeze({ cold: '冷', mild: '温', hot: '热', stalling: '失速' });
 
+// 把快照的小区趋势字段挂到房源行（map 消费；row 需带 community 字段）。
+// 快照缺失或**过期（stale）→ 全部 null**：AC 语义是"过期不渲染温度"，绝不拿旧快照冒充当前。
+export function attachTrendToHouses(rows, trendInfo) {
+  const usable = trendInfo && !trendInfo.stale;
+  const byComm = new Map(Object.entries(usable ? trendInfo.snapshot?.communities ?? {} : {})
+    .filter(([, c]) => c.status === 'indexed')
+    .map(([k, c]) => [k, {
+      temp: c.temperature ?? null,
+      label: TREND_TEMP_LABEL[c.temperature] ?? null,
+      right: c.right_side_weeks ?? null,
+      events: c.n_events_12w ?? null,
+    }]));
+  return (rows ?? []).map((r) => {
+    const t = byComm.get(normCommunity(r.community)) ?? null;
+    return {
+      ...r,
+      trend_temp: t?.temp ?? null,
+      trend_label: t?.label ?? null,
+      trend_right: t?.right ?? null,
+      trend_events: t?.events ?? null,
+    };
+  });
+}
+
 // 基础工具 ----------
 
 const round1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);

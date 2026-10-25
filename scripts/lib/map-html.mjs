@@ -4,14 +4,12 @@
 
 import { PAGE_CSS } from './map-tokens.mjs';
 import { DEMO_HOUSES } from './map-demo.mjs';
-import { TREND_TEMP_LABEL } from './trend.mjs';
 import { PAGE_SCRIPT } from './map-page.mjs';
 import { PROFILE_FIELDS } from './profile.mjs';
 
 export function renderMapHtml({ initialData }) {
   const jsonString = JSON.stringify(initialData).replace(/</g, '\\u003c');
   const DEMO_JSON = JSON.stringify(DEMO_HOUSES).replace(/</g, '\\u003c');
-  const TREND_TEMP_JSON = JSON.stringify(TREND_TEMP_LABEL);
   const PROFILE_FIELDS_JSON = JSON.stringify(PROFILE_FIELDS);
 
   return `<!DOCTYPE html>
@@ -482,7 +480,6 @@ export function renderMapHtml({ initialData }) {
   <script>
     const INITIAL_DATA = ${jsonString};
     const DEMO_HOUSES = ${DEMO_JSON}
-    const TREND_TEMP_LABEL = ${TREND_TEMP_JSON};
     const PROFILE_FIELDS = ${PROFILE_FIELDS_JSON};
 ${PAGE_SCRIPT}
   </script>

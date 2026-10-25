@@ -7,7 +7,8 @@
 // 纪律：单次 ≤12 次抓取、间隔+抖动；仅房天下（其他平台响亮 unsupported_platform，不硬解析）；
 //       布局变更 → parse_failed 不落盘（操作信号，不是数据）；记录追加式，同日重跑覆盖当日 -auto 文件。
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScrapers } from '../scrapers/_registry.mjs';
@@ -49,10 +50,10 @@ async function fetchPage(url, { timeoutMs = RESCAN_BUDGET.fetch_timeout_ms } = {
 }
 
 const [cmd] = process.argv.slice(2);
-const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const hasFlags = process.argv.slice(2).some((a) => a.startsWith('--'));
 
-if (cmd !== 'run' && positional.length === 0 && !process.argv.slice(2).some((a) => a.startsWith('--'))) {
-  console.error('用法: node scripts/rescan.mjs [--urls <file>] [--corpus <dir>] [--out <dir>] [--dry-run] [--max-fetches N]');
+if (cmd !== 'run' && !hasFlags) {
+  console.error('用法: node scripts/rescan.mjs run [--urls <file>] [--corpus <dir>] [--out <dir>] [--dry-run] [--max-fetches N]');
   console.error('  opt-in 自动复扫：仅在你自己的 fork 里跑（模板见 templates/actions/rescan.example.yml，文档见 docs/automated-rescan.md）');
   process.exit(1);
 }
@@ -107,7 +108,9 @@ for (let i = 0; i < plan.fetches.length; i++) {
     continue;
   }
   const record = buildRecord(item.kind, extracted, { url: item.url, listingId: item.listing_id, today });
-  const file = join(corpusDir, `fang-${item.listing_id ?? item.url.slice(-16)}-${today}-auto.json`);
+  // 同日重跑不覆盖：-auto 后缀 + 序号递增（追加式纪律；跨天天然唯一）
+  let file = join(corpusDir, `fang-${item.listing_id ?? item.url.slice(-16)}-${today}-auto.json`);
+  for (let n = 2; existsSync(file); n++) file = join(corpusDir, `fang-${item.listing_id ?? item.url.slice(-16)}-${today}-auto-${n}.json`);
   await writeFile(file, `${JSON.stringify(record, null, 2)}\n`);
   written.push(file);
   console.log(`✅ [${item.kind}] ${record.community || item.url} → ${file}${item.kind === 'community' ? ` · 参考均价 ${extracted.reference.unit_price} 元/㎡（${extracted.reference.as_of_month ?? '?'}）` : ''}`);
@@ -116,7 +119,6 @@ for (let i = 0; i < plan.fetches.length; i++) {
 // 就地刷新趋势快照（与 trend build 同一纯函数入口；追加式，历史文件保留）
 let snapshotMsg = '跳过（无已写记录）';
 if (written.length) {
-  const { readdir } = await import('node:fs/promises');
   const files = (await readdir(corpusDir).catch(() => [])).filter((f) => f.endsWith('.json'));
   const records = [];
   for (const f of files) {

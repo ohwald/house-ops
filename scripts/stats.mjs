@@ -7,6 +7,7 @@
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectReports, loadTrendSnapshot } from './lib/data.mjs';
+import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 const all = await collectReports(join(root, 'reports'), { includeVoid: true });
@@ -49,7 +50,7 @@ if (!trend) {
   const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
   const head = `${trend.stale ? '⚠️ ' : ''}快照 ${trend.date}（${trend.age_days} 天前${trend.stale ? '，>14 天建议复扫刷新' : ''}）`;
   if (!p) console.log(`  ${head} · 暂无已索引小区（全部 not_enough_data）`);
-  else console.log(`  ${head} · ${p.n_communities} 个已索引小区 · 近4周 ${pct(p.index_4w)} · 近12周 ${pct(p.index_12w)} · 温度 ${p.temperature ?? '—'} · 右侧 ${p.right_side_weeks} 周`);
+  else console.log(`  ${head} · ${p.n_communities} 个已索引小区 · 近4周 ${pct(p.index_4w)} · 近12周 ${pct(p.index_12w)} · 温度 ${TREND_TEMP_LABEL[p.temperature] ?? '—'} · 右侧 ${p.right_side_weeks} 周`);
   const withTrend = rows.filter(r => r.trend);
   if (withTrend.length) console.log(`  Machine Summary 携带 trend 字段: ${withTrend.length} 份报告`);
 }

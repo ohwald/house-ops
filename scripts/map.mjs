@@ -15,7 +15,7 @@ import { collectReports, parseWatchlist, effectiveProvenance, num, loadTrendSnap
 import { parseProfile } from './lib/profile.mjs';
 import { loadGeoCache } from './lib/geo.mjs';
 import { decide, isUserExcluded } from './lib/decision.mjs';
-import { normCommunity } from './lib/trend.mjs';
+import { attachTrendToHouses } from './lib/trend.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,15 +69,11 @@ async function loadFullData() {
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
     readFile(PROFILE_PATH, 'utf8').catch(() => ''),
-    // 趋势快照（第三数据源，ADR-0003/0004）：缺失/过期由消费端降级展示，不崩溃
+    // 趋势快照（第三数据源，ADR-0003/0004）：缺失/过期由 attachTrendToHouses 降级（不渲染温度），不崩溃
     loadTrendSnapshot(join(ROOT, 'data', 'trend')),
   ]);
-  // 小区级趋势字段（仅 indexed 小区），按归一化小区名挂到房源上；快照元数据整体透传
-  const trendByComm = new Map(Object.entries(trendInfo?.snapshot?.communities ?? {})
-    .filter(([, c]) => c.status === 'indexed')
-    .map(([k, c]) => [k, { temp: c.temperature ?? null, right: c.right_side_weeks ?? null, events: c.n_events_12w ?? null }]));
   const trendMeta = trendInfo ? {
-    as_of: trendInfo.date, stale: trendInfo.stale,
+    as_of: trendInfo.date, stale: trendInfo.stale, age_days: trendInfo.age_days,
     badge: trendInfo.snapshot.calibration?.badge ?? 'uncalibrated',
   } : null;
 
@@ -93,7 +89,6 @@ async function loadFullData() {
       const coords = r.coords || geoCache[key] || geoCache[r.community] || null;
       const wScore = w ? num(w.score) : null;
       const note = w ? w.note : '';
-      const t = trendByComm.get(normCommunity(r.community)) ?? null;
       return {
         ...r,
         coords,
@@ -102,13 +97,12 @@ async function loadFullData() {
         watchlist_note: note,
         user_excluded: isUserExcluded(note),
         authenticity: effectiveProvenance(r, w),
-        trend_temp: t?.temp ?? null,
-        trend_right: t?.right ?? null,
-        trend_events: t?.events ?? null,
       };
     })
-    // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染
-    .map(h => ({ ...h, decision: decide(h) }));
+    // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染；
+    // 趋势字段经 attachTrendToHouses 统一挂载（过期快照 → null，页面显示过期提示而非旧温度）
+    .map(h => ({ ...h, decision: decide(h) }))
+    .map(h => attachTrendToHouses([h], trendInfo)[0]);
 
   return {
     reports: mergedReports,

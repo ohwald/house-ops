@@ -73,17 +73,18 @@ const first = (html, ...patterns) => {
 // 详情页：总价/单价/面积/户型/楼层/挂牌时间/小区名（面包屑）
 export function extractFangListing(html) {
   const htmlStr = String(html ?? '');
+  // 兜底正则必须带上下文锚（总价词/标签），否则页面局部改版会把无关数字绑成主价格——反幻觉纪律
   const total = num0(first(htmlStr,
     /price_esf[^>]*>\s*<i>([\d.,]+)<\/i>\s*万/i,
     /class="[^"]*price[^"]*"[^>]*>\s*([\d.,]+)\s*万/i,
-    /([\d]{2,4}(?:\.\d+)?)\s*万\b/));
+    /(?:总价|挂牌价|售 价)[^<>\d]{0,40}([\d]{2,4}(?:\.\d+)?)\s*万/));
   const unit = num0(first(htmlStr,
     /([\d.,]+)\s*元\s*\/\s*平米/,
     /([\d.,]+)\s*元\s*\/\s*(?:㎡|m²)/i));
   const area = num0(first(htmlStr,
     /"建筑面积","value":"([\d.]+)㎡"/,
     /建筑面积[^>]*>[\s\S]{0,40}?([\d.]+)\s*㎡/));
-  const layout = first(htmlStr, /<div class="tt">\s*(\d室\d厅(?:\d卫)?)\s*<\/div>/, /(\d室\d厅(?:\d卫)?)/);
+  const layout = first(htmlStr, /<div class="tt">\s*(\d室\d厅(?:\d卫)?)\s*<\/div>/, /(?:户型|户型图)[^<>\d]{0,30}(\d室\d厅(?:\d卫)?)/);
   const floorTotal = first(htmlStr, /共\s*(\d+)\s*层/);
   const listedAt = first(htmlStr, /"挂牌时间","value":"(\d{4}-\d{2}-\d{2})"/);
   const commMatch = /<a[^>]*href="\/loupan\/(\d+)\.htm"[^>]*class="blue"[^>]*>\s*([^<]+?)\s*<\/a>/.exec(htmlStr);
@@ -124,7 +125,7 @@ export function extractFangCommunity(html) {
   return {
     status: 'ok',
     reference: { unit_price: Math.round(unit), as_of_month: month ? `${month}月参考价` : null },
-    listing_count: listingCount,
+    listing_count: listingCount,   // 可为 null：平台未披露在售数时如实缺失，不当 0
     built_year: builtYear ? Math.round(builtYear) : null,
   };
 }
