@@ -58,6 +58,17 @@ codex plugin marketplace add ohwald/house-ops
 codex plugin add house-ops@house-ops
 ```
 
+WorkBuddy installs from its own skill market — search for **买房决策助手 / House Ops** once the listing is live.
+The upload package is a self-contained ZIP (top level must be `house-ops/`, ≤3MB):
+
+```bash
+node tools/package-skill-wb.mjs   # → dist/house-ops-<version>.zip
+```
+
+In market-managed installs (`~/.workbuddy/skills/house-ops`, `~/.claude/skills/house-ops`, …) your writable
+state lives at `~/house-ops-data` instead of inside the skill folder, so a skill upgrade cannot wipe your
+profile, reports or viewing notes; `scripts/wb-setup.mjs` sets that up once and is idempotent.
+
 Inside this repository the skill is already wired up through `.claude/skills/`, so installing the plugin is only
 needed when you want house-ops in *another* project. Prefer to clone instead?
 
@@ -406,6 +417,16 @@ Codex 读的是同一份市场清单，所以它自己的 CLI 也能装：
 codex plugin marketplace add ohwald/house-ops
 codex plugin add house-ops@house-ops
 ```
+
+WorkBuddy 走它自己的技能市场：上架后在技能市场搜「买房决策助手」即可安装。要自己打包上传，用：
+
+```bash
+node tools/package-skill-wb.mjs   # → dist/house-ops-<version>.zip
+```
+
+受管安装形态（`~/.workbuddy/skills/house-ops`、`~/.claude/skills/house-ops` 等）下，可写的用户数据
+落在 `~/house-ops-data` 而不是技能目录里，技能升级不会覆盖画像、报告和带看记录；
+`scripts/wb-setup.mjs` 负责一次性外置，重复运行安全。
 
 在本仓库里技能已通过 `.claude/skills/` 直接可用，所以只有想在**别的项目**里用 house-ops 时才需要装插件。也可以直接克隆：
 

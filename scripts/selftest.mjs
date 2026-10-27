@@ -915,6 +915,28 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
     has('AGENTS.md 未镜像进技能目录（防 PROJECT_ROOT 掉进去）', leaked === false);
   }
 
+  // WorkBuddy 市场清单：平台按 SKILL.md 的 frontmatter 校验，缺一个字段就直接拒收 ZIP。
+  // version 又是第五处版本号（前四处见下面 plugin/marketplace/codex），漂移了用户装到的版本
+  // 就和仓库对不上——所以在这里一并钉住，别等到上传才发现。
+  {
+    const skillMd = join(ROOT, '.agents/skills/house-ops/SKILL.md');
+    if (await stat(skillMd).then(() => true).catch(() => false)) {
+      const fmText = /^---\r?\n([\s\S]*?)\r?\n---/.exec(await readFile(skillMd, 'utf8'))?.[1] ?? '';
+      const fm = {};
+      for (const line of fmText.split('\n')) {
+        const kv = /^([a-z][a-z0-9_-]*):(.*)$/i.exec(line);
+        if (kv) fm[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '');
+      }
+      const required = ['name', 'display_name', 'display_name_en', 'description',
+        'description_zh', 'description_en', 'version', 'author'];
+      eq('SKILL.md 含 WorkBuddy 市场必填字段', required.filter((k) => !fm[k]), []);
+      eq('SKILL.md name 是 kebab-case（平台硬规则）', /^[a-z0-9]+(-[a-z0-9]+)*$/.test(fm.name ?? ''), true);
+
+      const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
+      eq('SKILL.md version 与 package.json 一致（第五处版本号）', fm.version, pkg.version);
+    }
+  }
+
   // Claude Code 插件清单：仓库根就是 plugin root（.claude-plugin/ 在那儿），
   // marketplace 与 plugin 的版本必须同 package.json 一致 —— 三个版本号一旦漂移，
   // 用户装到的版本就和仓库对不上。分发副本里没有 .claude-plugin/，自动跳过。

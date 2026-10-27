@@ -42,6 +42,11 @@
 
 **THE RULE**：当用户要求修改"我的需求/偏好/预算"时，写入 `modes/_profile.md` 或 `config/profile.yml`；当用户要求修改"流程/家规/评分口径"时，写入 `modes/_custom.md`。**永远不要**为用户个性化内容修改 `modes/_shared.md` 或其他系统层文件。
 
+**DATA_ROOT（受管安装形态）**：技能被装进 Agent 技能目录（`~/.workbuddy/skills/house-ops`、`~/.claude/skills/house-ops` 等）时，
+`data/`、`reports/`、`config/profile.yml` 会被版本更新覆盖，所以这三者外置到 `${HOUSE_OPS_DATA:-$HOME/house-ops-data}`，
+技能目录里只留软链（`scripts/wb-setup.mjs` 一次性完成，幂等；Windows 建不了软链时保持原位并告警）。
+仓库形态（根上有 `.git/`）DATA_ROOT 就是仓库根，行为不变。读数据类脚本传 DATA_ROOT，需要系统资产的脚本传 PROJECT_ROOT——口径见 `SKILL.md`「数据根」节。
+
 ---
 
 ## 决策两阶段工作流（Two-Stage Pipeline）
@@ -114,6 +119,7 @@
 | `docs/markets/eu.md` | 欧洲选国理由、开放数据现实约束与扩展方式（新增市场前先读） |
 | `docs/markets/apac.md` | 亚太三市场的成交价可得性差异、退出机制差别与已记录的口径冲突（新增市场前先读） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
+| `scripts/wb-setup.mjs` | 受管安装形态下把 `data/`、`reports/`、`config/profile.yml` 外置到 DATA_ROOT（幂等；仓库形态直接跳过） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |

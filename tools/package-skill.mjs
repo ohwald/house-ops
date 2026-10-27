@@ -18,16 +18,19 @@
 
 import { rm, mkdir, cp, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = process.argv[2] ?? join(ROOT, '.workbuddy/tmp/clawhub/house-ops');
+const DEFAULT_OUT = join(ROOT, '.workbuddy/tmp/clawhub/house-ops');
 
 async function exists(p) {
   try { await stat(p); return true; } catch { return false; }
 }
 
-async function main() {
+// 产出目录的构造逻辑唯一一份：ClawHub 与 WorkBuddy 两个分发形态的差异只在打包外壳，
+// 内容必须同源——否则两边卖的东西会悄悄漂移。
+export async function buildPackage(out = DEFAULT_OUT) {
+  const OUT = out;
   console.log(`打包 house-ops → ${OUT}`);
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
@@ -63,7 +66,16 @@ async function main() {
 
   const total = (await readdir(OUT, { recursive: true })).length;
   console.log(`\n完成：${total} 个条目，输出在 ${OUT}`);
-  console.log('发布：clawhub skill publish <目录> --slug house-ops --version <x.y.z>');
+  return OUT;
 }
 
-main().catch((e) => { console.error('⛔', e.message); process.exitCode = 1; });
+async function main() {
+  const OUT = await buildPackage(process.argv[2] ?? DEFAULT_OUT);
+  console.log('发布：clawhub skill publish <目录> --slug house-ops --version <x.y.z>');
+  return OUT;
+}
+
+// 只有直接执行才跑 CLI；被 package-skill-wb.mjs import 时必须闭嘴
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => { console.error('⛔', e.message); process.exitCode = 1; });
+}
