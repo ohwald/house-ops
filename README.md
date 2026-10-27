@@ -69,6 +69,13 @@ In market-managed installs (`~/.workbuddy/skills/house-ops`, `~/.claude/skills/h
 state lives at `~/house-ops-data` instead of inside the skill folder, so a skill upgrade cannot wipe your
 profile, reports or viewing notes; `scripts/wb-setup.mjs` sets that up once and is idempotent.
 
+The market only accepts `root/one-directory/file` — a third level makes it reject the whole ZIP, so the
+upload copy is flattened: `scripts/lib/` is lifted to `lib/`, `docs/markets/eu.md` becomes
+`docs/markets-eu.md`, and `templates/actions/` moves up one level, with relative imports and documented
+paths rewritten to match. The script then re-reads the ZIP's real entries and resolves every relative
+import, so a newly added third-level directory fails the build instead of failing the upload. The
+repository and the ClawHub package keep their original layout.
+
 Inside this repository the skill is already wired up through `.claude/skills/`, so installing the plugin is only
 needed when you want house-ops in *another* project. Prefer to clone instead?
 
@@ -427,6 +434,12 @@ node tools/package-skill-wb.mjs   # → dist/house-ops-<version>.zip
 受管安装形态（`~/.workbuddy/skills/house-ops`、`~/.claude/skills/house-ops` 等）下，可写的用户数据
 落在 `~/house-ops-data` 而不是技能目录里，技能升级不会覆盖画像、报告和带看记录；
 `scripts/wb-setup.mjs` 负责一次性外置，重复运行安全。
+
+市场包另有硬约束：平台只接受「根/一级目录/文件」，第三层会让整个 ZIP 解析失败。所以上传副本会被
+压平——`scripts/lib/` 提到包根 `lib/`（`scripts/` 下已有同名 `rescan/trend`，直接并入会互相覆盖），
+`docs/markets/eu.md` 变成 `docs/markets-eu.md`，`templates/actions/` 上提一层——相对 import 和文档里
+的路径一并改写。打包最后会按 ZIP 的真实条目复查层级、逐个解析相对 import，所以以后新增三层目录是
+**打包报错**，不是上传后才被发现。仓库与 ClawHub 形态保持原结构，不受影响。
 
 在本仓库里技能已通过 `.claude/skills/` 直接可用，所以只有想在**别的项目**里用 house-ops 时才需要装插件。也可以直接克隆：
 
