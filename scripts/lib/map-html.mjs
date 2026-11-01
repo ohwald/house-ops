@@ -314,6 +314,7 @@ export function renderMapHtml({ initialData }) {
         <div class="sec-body">
           <div style="color:#cbd5e1;" id="m-trend-cycle">周期状态: --</div>
           <div style="color:var(--text-muted); font-size:0.75rem;" id="m-trend-discount">挂牌-成交折价空间: --</div>
+          <div style="color:var(--text-muted); font-size:0.75rem;" id="m-trend-line">盘口趋势: --</div>
         </div>
       </div>
 

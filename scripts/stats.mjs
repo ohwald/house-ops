@@ -6,7 +6,8 @@
 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectReports } from './lib/data.mjs';
+import { collectReports, loadTrendSnapshot } from './lib/data.mjs';
+import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 const all = await collectReports(join(root, 'reports'), { includeVoid: true });
@@ -15,8 +16,11 @@ const voidRows = all.filter(r => r.provenance === 'void');
 const rows = all.filter(r => r.provenance !== 'void');
 const suspectCount = rows.filter(r => r.provenance === 'suspect').length;
 
-if (!rows.length && !voidRows.length) {
-  console.log('reports/ 下没有可解析 Machine Summary 的报告。');
+// 关注池趋势视图（context 层，ADR-0004；快照缺失/过期如实提示，不冒充大盘——ADR-0003）
+const trend = await loadTrendSnapshot(join(root, 'data', 'trend'), { staleDays: 14 });
+
+if (!rows.length && !voidRows.length && !trend) {
+  console.log('reports/ 下没有可解析 Machine Summary 的报告，data/trend/ 下也没有趋势快照。');
   process.exit(0);
 }
 
@@ -37,6 +41,19 @@ for (const r of rows) {
 
 console.log(`评估报告: ${rows.length} 份${voidRows.length ? `（另有 ${voidRows.length} 份已作废，不参与统计）` : ''}`);
 if (suspectCount) console.log(`⚠️  真实性存疑: ${suspectCount} 套（数据未实采核验，结论仅供参考）`);
+
+console.log('\n关注池趋势（context 层，不进评分；采样=关注小区，非城市大盘）:');
+if (!trend) {
+  console.log('  （无快照——node scripts/trend.mjs build 生成，周度复扫后刷新）');
+} else {
+  const p = trend.snapshot.pool;
+  const pct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`);
+  const head = `${trend.stale ? '⚠️ ' : ''}快照 ${trend.date}（${trend.age_days} 天前${trend.stale ? '，>14 天建议复扫刷新' : ''}）`;
+  if (!p) console.log(`  ${head} · 暂无已索引小区（全部 not_enough_data）`);
+  else console.log(`  ${head} · ${p.n_communities} 个已索引小区 · 近4周 ${pct(p.index_4w)} · 近12周 ${pct(p.index_12w)} · 温度 ${TREND_TEMP_LABEL[p.temperature] ?? '—'} · 右侧 ${p.right_side_weeks} 周`);
+  const withTrend = rows.filter(r => r.trend);
+  if (withTrend.length) console.log(`  Machine Summary 携带 trend 字段: ${withTrend.length} 份报告`);
+}
 console.log(`综合评分均分: ${avg}（最高 ${scores.length ? Math.max(...scores).toFixed(1) : '—'}，最低 ${scores.length ? Math.min(...scores).toFixed(1) : '—'}）`);
 console.log('结论分布:', JSON.stringify(byConclusion, null, 2));
 

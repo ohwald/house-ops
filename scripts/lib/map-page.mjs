@@ -368,7 +368,10 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
 
         const d = h.decision;
         const scoreClass = d.markerCls === 'low' ? 'score-low' : (d.markerCls === 'high' ? 'score-high' : 'score-mid');
-        const subBits = [h.district, h.area_sqm ? h.area_sqm + '㎡' : null, h.type || null, h.built_year ? h.built_year + '年' : null]
+        const trendBits = h.trend_label
+          ? ['盘口' + h.trend_label + (h.trend_right ? '·右侧' + h.trend_right + '周' : '')]
+          : [];
+        const subBits = [h.district, h.area_sqm ? h.area_sqm + '㎡' : null, h.type || null, h.built_year ? h.built_year + '年' : null, ...trendBits]
           .filter(Boolean).join(' · ');
 
         item.innerHTML = \`
@@ -408,6 +411,16 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
 
       document.getElementById('m-trend-cycle').textContent = '周期状态: ' + (h.market_trend_text || (h.market_trend === 'bottoming' ? '筑底平稳' : '阴跌下行'));
       document.getElementById('m-trend-discount').textContent = '挂牌-成交折价空间: ' + (h.discount_space_text || (h.discount_space === 'wide' ? '议价弹性大(5%+)' : '正常议价空间(3-5%)'));
+      // 盘口边际趋势（context 层，ADR-0004）：仅 indexed 小区携带；快照过期 → 过期提示而非旧温度
+      // （纯字符串拼接，不走模板插值——textContent 路径由浏览器转义，selftest 的 esc 扫描也不涉及）
+      if (document.getElementById('m-trend-line')) {
+        const TM = (typeof INITIAL_DATA !== 'undefined' && INITIAL_DATA.trendMeta) || null;
+        let tl;
+        if (h.trend_label) tl = '盘口趋势: ' + h.trend_label + (h.trend_right ? ' · 右侧 ' + h.trend_right + ' 周' : '') + ' · 事件(12w) ' + (h.trend_events ?? '—');
+        else if (TM && TM.stale) tl = '盘口趋势: 快照已过期（as_of ' + TM.as_of + '，' + TM.age_days + ' 天前）——先跑 node scripts/trend.mjs build 刷新，不展示旧温度';
+        else tl = '盘口趋势: 暂无（周度复扫后 trend build 刷新）';
+        document.getElementById('m-trend-line').textContent = tl;
+      }
 
       document.getElementById('m-planning-impact').textContent = '规划红利: ' + (h.urban_planning_text || '现状配套为主，暂无重大新增规划');
       document.getElementById('m-planning-env').textContent = '地块用途与施工: ' + (h.urban_planning_env || '周边地块现状平稳');
@@ -870,7 +883,7 @@ export const PAGE_SCRIPT = `    let houses = INITIAL_DATA.reports || [];
         const scoreTxt = h.score_global != null ? h.score_global : '--';
         let html = \`<div class="marker-dot \${esc(d.markerCls)}\${h.authenticity === 'suspect' ? ' suspect' : ''}\${isSelected ? ' selected' : ''}">\${esc(scoreTxt)}</div>\`;
         if (isSelected) {
-          html = \`<div class="marker-label">\${esc(h.community) || ''} · \${h.total_price_wan != null ? esc(h.total_price_wan) + '万' : '--'}</div>\` + html;
+          html = \`<div class="marker-label">\${esc(h.community) || ''} · \${h.total_price_wan != null ? esc(h.total_price_wan) + '万' : '--'}\${h.trend_label ? ' · 盘口' + esc(h.trend_label) : ''}</div>\` + html;
         }
         const icon = L.divIcon({
           html,

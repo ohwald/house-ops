@@ -30,6 +30,7 @@
 | 路径 | 内容 |
 |---|---|
 | `AGENTS.md`、`CLAUDE.md` | 总规范与 CLI 入口 |
+| `GLOSSARY.md` | 领域术语表（趋势与价格推测词汇的 SoT） |
 | `.agents/skills/house-ops/SKILL.md` | 技能路由器（`.claude/`、`.zcode/` 下为符号链接） |
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
@@ -40,6 +41,11 @@
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
 
 **THE RULE**：当用户要求修改"我的需求/偏好/预算"时，写入 `modes/_profile.md` 或 `config/profile.yml`；当用户要求修改"流程/家规/评分口径"时，写入 `modes/_custom.md`。**永远不要**为用户个性化内容修改 `modes/_shared.md` 或其他系统层文件。
+
+**DATA_ROOT（受管安装形态）**：技能被装进 Agent 技能目录（`~/.workbuddy/skills/house-ops`、`~/.claude/skills/house-ops` 等）时，
+`data/`、`reports/`、`config/profile.yml` 会被版本更新覆盖，所以这三者外置到 `${HOUSE_OPS_DATA:-$HOME/house-ops-data}`，
+技能目录里只留软链（`scripts/wb-setup.mjs` 一次性完成，幂等；Windows 建不了软链时保持原位并告警）。
+仓库形态（根上有 `.git/`）DATA_ROOT 就是仓库根，行为不变。读数据类脚本传 DATA_ROOT，需要系统资产的脚本传 PROJECT_ROOT——口径见 `SKILL.md`「数据根」节。
 
 ---
 
@@ -113,9 +119,12 @@
 | `docs/markets/eu.md` | 欧洲选国理由、开放数据现实约束与扩展方式（新增市场前先读） |
 | `docs/markets/apac.md` | 亚太三市场的成交价可得性差异、退出机制差别与已记录的口径冲突（新增市场前先读） |
 | `scripts/reserve-report-num.mjs` | 报告编号原子分配（并发安全） |
+| `scripts/wb-setup.mjs` | 受管安装形态下把 `data/`、`reports/`、`config/profile.yml` 外置到 DATA_ROOT（幂等；仓库形态直接跳过） |
 | `scripts/doctor.mjs` | 无 AI 环境自检 |
 | `scripts/stats.mjs` | Machine Summary 统计（解析契约 = evaluate.md 的 schema） |
 | `scripts/scan.mjs` | 平台识别 / 扫描记录归一化 / 挂牌-成交交叉验证 / 政务源查询（子命令式 CLI；平台模块契约见 `scrapers/ADDING_A_PLATFORM.md`） |
+| `scripts/trend.mjs` | 盘口边际趋势：周度小区指数、温度/右侧信号、关注池聚合与校准回测（build/show/backtest/band；引擎 `scripts/lib/trend.mjs`；口径见 ADR-0003/0004 与 `modes/scan.md` 趋势读数节） |
+| `scripts/rescan.mjs` | opt-in 自动复扫（fork 用户配合 `templates/actions/rescan.example.yml` 自建 GitHub Actions；确定性提取 `scripts/lib/rescan.mjs`，仅房天下，≤12 次/运行；文档 `docs/automated-rescan.md`，上游仓库无任何活工作流） |
 | `scripts/lib/data.mjs` | stats/dashboard/map 共享数据解析层（报告/watchlist） |
 | `scripts/dashboard.mjs` | Ink TUI 仪表盘（唯一带依赖的脚本；TTY 实时界面，管道输出单帧文本） |
 | `scripts/map.mjs` | 交互式房源地图决策中枢（生成单文件静态 HTML `data/map.html`，支持高德地图、通勤圈、筛选与画像导出；页面纯静态，不启动本地服务、不开放端口；零外部依赖） |
@@ -144,6 +153,7 @@
 | "我的清单"、"候选列表"、"更新 005 的备注" | `watchlist` |
 | "统计一下"、"我的找房数据"、"失分分析" | `stats` |
 | "在地图上看"、"地图决策"、"房源分布"、"生成地图" | `map`（优先跑 `node scripts/map.mjs`，生成后用浏览器打开 `data/map.html`） |
+| "看趋势"、"小区走势"、"盘口温度" | `stats`（趋势视图读最新快照；引擎命令见 `modes/scan.md` 趋势读数节） |
 | "自检/体检"、"哪里配置有问题" | `doctor` |
 | `/house-ops` 无参数或"你能做什么" | 显示 discovery 菜单（见 SKILL.md） |
 | 模糊但包含房源链接或明显房源描述 | 默认 `evaluate`，先说明将执行的流程 |
@@ -178,3 +188,4 @@
 - 扫描记录（scan 模式）落 `data/scans/`，schema `house-ops.scan/1`（SoT：`modes/scan.md`）：不占报告编号、不登记 watchlist；evaluate / deep-dive / negotiate 引用扫描记录时必须带 as_of 与可靠度档位。
 - 扫描记录是**追加式历史**：同一房源多次扫描落多个日期戳文件，禁止覆盖/改写旧记录——价格、调价、带看的时间序列是分析房东定价策略的依据（`node scripts/scan.mjs history`）。用户间隔较久回来时（默认 >14 天，`modes/_custom.md` 可覆盖），scan/watchlist 模式须提示是否快速复扫在追踪房源；过期挂牌价不得当作当前价引用。
 - **房源实体按指纹关联**（小区+面积±0.6㎡+户型+总楼层+朝向+年代，`scan.mjs match`）：跨平台同源挂牌与下架重挂必须归并到同一实体历史下，禁止按挂牌 ID 孤立追踪——换平台重挂/多平台差价是房东常见策略（重定价/引流），系统要能看见。
+- **自动复扫是 fork 侧 opt-in 能力**（`templates/actions/rescan.example.yml` + `scripts/rescan.mjs`）：上游仓库无任何活工作流、默认手动节奏；fork 用户在私有 fork 自建采集，单次 ≤12 次抓取的限额是代码内硬约束（见 `docs/automated-rescan.md`）。

@@ -16,14 +16,24 @@ import {
 } from '../scrapers/_fields.mjs';
 import { groupDetections, overBudgetWarning } from './lib/detect.mjs';
 import { checkGranularity, readOfficialSources, filterSources } from './lib/official-sources.mjs';
-import { authenticityFromNote, effectiveProvenance } from './lib/data.mjs';
+import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTrendSnapshot } from './lib/data.mjs';
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
+import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
 import { buildEvidenceName, evidenceDirFor, evidenceEntry, EVIDENCE_TYPES } from './evidence.mjs';
 import { loadScrapers, detectPlatform, liftMobileCity } from '../scrapers/_registry.mjs';
+import {
+  RESCAN_BUDGET, planRescan, scheduleDelay, extractFangListing, extractFangCommunity, buildRecord,
+} from './lib/rescan.mjs';
+import {
+  TREND_SCHEMA, isoWeek, normCommunity, trendEligibleRecords, groupByCommunity,
+  extractCommunityEvents, weeklyIndex, cumulativeIndex, nEventsWindow, temperatureOf,
+  rightSideWeeks, buildSnapshot, collectAnchors, cumulativeBetween, calibrate, badgeOf,
+  fairPriceBand, attachTrendToHouses,
+} from './lib/trend.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let failed = 0;
@@ -179,6 +189,252 @@ const unitA = (platform, id, date, price) => ({
   eq('实体含两键', es[0].summary.listing_keys.sort().join('|'), 'beike:999888777|lianjia:107115820274');
   // 单价采集价差 null（继承 buildPriceHistory 语义）
   eq('实体单时点价差 null', buildEntityHistory([corpus[0]])[0].summary.price_delta_wan, null);
+
+  // null-fingerprint 组守卫（2026-10-26 实测崩溃：无 listing 的小区页/复扫记录先建 _fp:null 组，
+  // 之后的可指纹记录 find 时 touch g._fp.community 崩溃——修复后正确跳过 null 组）
+  const noFp = { platform: 'fang', listing_id: 'c9', community: '测试小区', district: '浦东', scanned_at: '2026-09-10', listing: {} };
+  const es2 = buildEntityHistory([noFp, corpus[0]]);
+  eq('null 指纹组不崩且不吞可指纹记录', es2.length, 2);
+  eq('null 指纹记录独立成组（unmatched）', es2.some((e) => e.entity_id.startsWith('unmatched~')), true);
+}
+
+// ---------- 趋势引擎（lib/trend.mjs golden：周度指数 / 温度 / 右侧 / 聚合） ----------
+// fixture 全部内联，小区用虚构名；期望值按 asOf = 2026-10-12 手算（W36/W37/W42 三个采集周）。
+// total_price_wan 由 单价×面积 补齐：真实记录两口径齐备，buildEntityHistory 的价格点以总价存在为前提。
+
+const tRec = (platform, id, date, unit, over = {}) => ({
+  platform, listing_id: id, scanned_at: date, status: over.status ?? 'complete',
+  community: over.community ?? '趋势测试小区', district: over.district ?? '浦东·测试',
+  url: `https://t.example/${platform}-${id}`,
+  capture: { channel: 'webfetch', captured_at: date, url_verified: over.urlVerified ?? true },
+  listing: {
+    unit_price: unit, total_price_wan: Math.round((unit * (over.area ?? 100)) / 10000 * 100) / 100,
+    area_sqm: over.area ?? 100, layout: over.layout ?? '3室1厅',
+    floor: over.floor ?? '低楼层(共18层)', orientation: over.orient ?? '南北', built_year: over.year ?? 2016,
+  },
+});
+
+{
+  // ISO 周锚定：年初/年末跨年边界（1 月 1 日可落上年末周）
+  eq('isoWeek 周一锚定', isoWeek('2026-08-31'), { label: '2026-W36', monday: '2026-08-31' });
+  eq('isoWeek 年初回上年末周', isoWeek('2026-01-01'), { label: '2026-W01', monday: '2025-12-29' });
+  eq('isoWeek 年末跨年周', isoWeek('2027-01-01'), { label: '2026-W53', monday: '2026-12-28' });
+  eq('normCommunity 剥离空白/括号/间隔号', normCommunity('示范 海棠湾（三期·X）'), '示范海棠湾三期x');
+  eq('温度分档边界（-1.5 失速 / 0.8 热）',
+    [temperatureOf(null), temperatureOf(-1.5), temperatureOf(-1.4), temperatureOf(0), temperatureOf(0.8)],
+    [null, 'stalling', 'cold', 'mild', 'hot']);
+}
+
+{
+  // 实体 A/B/C/D 同小区不同指纹（面积/户型/朝向/年代互斥）；E/F 应被过滤；孤点小区单次采集
+  const trendRecords = [
+    // A（100㎡ 3室1厅 南北 2016）：跨平台同日同价归并 + 两次降价
+    tRec('lianjia', 'a1', '2026-08-31', 50000, { area: 100 }),
+    tRec('beike', 'b9', '2026-08-31', 50000, { area: 100 }),
+    tRec('lianjia', 'a1', '2026-09-07', 49500, { area: 100 }),
+    tRec('lianjia', 'a1', '2026-10-12', 48510, { area: 100 }),
+    // B（89㎡ 2室1厅）：两次采集后消失 → 下架
+    tRec('lianjia', 'b2', '2026-08-31', 48000, { area: 89, layout: '2室1厅' }),
+    tRec('lianjia', 'b2', '2026-09-07', 47040, { area: 89, layout: '2室1厅' }),
+    // C（120㎡ 3室2厅 共26层 2014）：三周连降
+    tRec('lianjia', 'c3', '2026-08-31', 52000, { area: 120, layout: '3室2厅', floor: '低楼层(共26层)', year: 2014 }),
+    tRec('lianjia', 'c3', '2026-09-07', 51480, { area: 120, layout: '3室2厅', floor: '低楼层(共26层)', year: 2014 }),
+    tRec('lianjia', 'c3', '2026-10-12', 50965, { area: 120, layout: '3室2厅', floor: '低楼层(共26层)', year: 2014 }),
+    // D（105㎡ 东西 2018）：09-07 新挂牌（vs 当日存量中枢 +1.0%）后降价
+    tRec('lianjia', 'd4', '2026-09-07', 50500, { area: 105, orient: '东西', year: 2018 }),
+    tRec('lianjia', 'd4', '2026-10-12', 49490, { area: 105, orient: '东西', year: 2018 }),
+    // E/F：partial 与 URL 未实访 → 不进趋势（ADR-0002）
+    tRec('lianjia', 'e5', '2026-08-31', 50000, { area: 77, status: 'partial' }),
+    tRec('lianjia', 'f6', '2026-09-07', 51000, { area: 66, urlVerified: false }),
+    // 孤点小区：单次采集 → not_enough_data
+    tRec('lianjia', 'z1', '2026-09-07', 50000, { community: '孤点小区', area: 95 }),
+    // provenance void（小区不存在判定）→ 不进趋势
+    { ...tRec('lianjia', 'v9', '2026-08-31', 50000, { area: 55 }), provenance: 'void' },
+  ];
+
+  // 过滤：15 条 → 12 条（E/F/void 剔除；孤点保留）
+  const eligible = trendEligibleRecords(trendRecords);
+  eq('trendEligibleRecords 剔除 partial/未实访', eligible.length, 12);
+  eq('E/F 不在合格记录中', eligible.filter((r) => ['e5', 'f6'].includes(r.listing_id)).length, 0);
+  eq('void provenance 记录不进趋势（ADR-0002）', eligible.filter((r) => r.listing_id === 'v9').length, 0);
+
+  // 分组：趋势测试小区（4 实体）+ 孤点小区（1 实体）
+  const groups = groupByCommunity(buildEntityHistory(eligible, { today: '2026-10-12' }));
+  eq('小区分组数', groups.length, 2);
+  const main = groups.find((g) => g.key === '趋势测试小区');
+  eq('主小区实体数（A/B/C/D 指纹互斥）', main.entities.length, 4);
+
+  // 边际事件：调价 6（A2/B1/C2/D1）、新挂牌 4（仅 D 有存量中枢幅度）、下架 1（B）
+  const events = extractCommunityEvents(main.entities);
+  const byType = events.reduce((m, e) => ((m[e.type] ??= []).push(e), m), {});
+  eq('事件类型计数（调价/新挂牌/下架）',
+    [byType.price_change?.length, byType.new_listing?.length, byType.delisting?.length], [6, 4, 1]);
+  eq('调价归因到实体（面积→次数）', byType.price_change.reduce((m, e) => {
+    const area = /~(\d+)㎡/.exec(e.entity_id)[1]; m[area] = (m[area] ?? 0) + 1; return m;
+  }, {}), { '100': 2, '105': 1, '120': 2, '89': 1 });
+  eq('新挂牌幅度（首日无存量中枢 → null；D vs 中位 50000 → +1.0）',
+    byType.new_listing.map((e) => e.magnitude_pct), [null, null, null, 1]);
+  eq('下架记在小区末次采集日（缺位 35 天 ≥ 21 天阈值）', byType.delisting.map((e) => e.at), ['2026-10-12']);
+  has('下架实体是 89㎡ 的 B', /~89㎡/.test(byType.delisting[0].entity_id));
+
+  // 周度指数：首周无幅度事件沉默；W37 中位 [-2,-1,-1,+1] → -1.0；W42 [-2,-1,-2] → -2.0 + 供给 1
+  const weekly = weeklyIndex(events);
+  eq('weeklyIndex 周读数', weekly, [
+    { week: '2026-W36', index: null, n_events: 0, supply_events: 0 },
+    { week: '2026-W37', index: -1, n_events: 4, supply_events: 0 },
+    { week: '2026-W42', index: -2, n_events: 3, supply_events: 1 },
+  ]);
+  // 窗口累计：4 周窗只剩 W42（age0 权重 1）；12 周窗 W37 衰减 0.5^(5/2)≈-0.18，合计 -2.18 → -2.2
+  eq('cumulativeIndex 4 周窗 / 12 周窗',
+    [cumulativeIndex(weekly, { window: 4, asOf: '2026-10-12' }), cumulativeIndex(weekly, { window: 12, asOf: '2026-10-12' })],
+    [-2, -2.2]);
+  eq('nEventsWindow 12 周事件数', nEventsWindow(weekly, 12, '2026-10-12'), 7);
+  eq('右侧周数（W42 单周 |−2.0| ≥ 0.8；W37 与 W42 不相邻 → 断裂）', rightSideWeeks(weekly), 1);
+  eq('右侧反向重置（新方向单周计 1，旧方向清零）', rightSideWeeks([
+    { week: '2026-W36', monday: '2026-08-31', index: 1 },
+    { week: '2026-W37', monday: '2026-09-07', index: -1 },
+  ]), 1);
+  eq('右侧单周不足阈值 → 0', rightSideWeeks([{ week: '2026-W36', monday: '2026-08-31', index: -0.5 }]), 0);
+
+  // 快照组装：小区读数 + 孤点沉默 + 池聚合 + 板块门槛 + 校准初始态
+  const snap = buildSnapshot(trendRecords, { today: '2026-10-12' });
+  eq('快照 schema/as_of', [snap.schema, snap.as_of], [TREND_SCHEMA, '2026-10-12']);
+  const c = snap.communities['趋势测试小区'];
+  eq('主小区读数（4w/12w/温度/右侧/事件/状态）',
+    [c.index_4w, c.index_12w, c.temperature, c.right_side_weeks, c.n_events_12w, c.status],
+    [-2, -2.2, 'stalling', 1, 7, 'indexed']);
+  eq('主小区覆盖度', c.coverage, { entities: 4, captures: 11, first_capture: '2026-08-31', last_capture: '2026-10-12' });
+  eq('主小区周度表与 weeklyIndex 一致', c.weekly, weekly);
+  const lone = snap.communities['孤点小区'];
+  eq('孤点小区 not_enough_data（沉默 ≠ 稳定）', [lone.status, lone.index_4w, lone.right_side_weeks], ['not_enough_data', null, 0]);
+  eq('关注池聚合（成员周中位数再累计）',
+    [snap.pool.n_communities, snap.pool.index_4w, snap.pool.index_12w, snap.pool.temperature],
+    [1, -2, -2.2, 'stalling']);
+  eq('板块级未达 ≥3 已索引小区不输出', snap.districts, {});
+  eq('校准初始态（回测未起，含排除计数）', snap.calibration, { n: 0, hit_rate: null, badge: 'uncalibrated', excluded: { low_tier: 0, no_overlap: 0, flat: 0 } });
+}
+
+// ---------- 校准回测（T5 #19：锚点方向比较 / 徽章三态 / 排除显式计数） ----------
+
+{
+  // 徽章三态边界：<10 次一律未校准；≥10 且 ≥60% → calibrated；<40% → refuted；中间带 → 未校准
+  eq('badgeOf 三态边界',
+    [badgeOf(0, null), badgeOf(9, 0.7), badgeOf(10, 0.6), badgeOf(15, 0.55), badgeOf(12, 0.39), badgeOf(10, 0.4)],
+    ['uncalibrated', 'uncalibrated', 'calibrated', 'uncalibrated', 'refuted', 'uncalibrated']);
+
+  // 窗口累计（未加权）：monday ∈ (from, to] 的非空周求和；空窗 → null
+  const weekly = [
+    { week: '2026-W36', monday: '2026-08-31', index: -1, n_events: 3, supply_events: 0 },
+    { week: '2026-W40', monday: '2026-09-28', index: 1, n_events: 4, supply_events: 0 },
+  ];
+  eq('cumulativeBetween 含两端', cumulativeBetween(weekly, '2026-08-30', '2026-09-28'), 0);
+  eq('cumulativeBetween 左开右闭', cumulativeBetween(weekly, '2026-08-31', '2026-09-28'), 1);
+  eq('cumulativeBetween 空窗 → null', cumulativeBetween(weekly, '2026-09-29', '2026-10-26'), null);
+
+  // 方向比较：miss（锚点-4 vs 指数+1）/ hit（丁 +1.5% 同向）/ flat（乙 +0.3%）/ no_overlap（空窗）/ low_tier（非成交档）
+  const anchors = new Map([
+    ['小区甲', [
+      { date: '2026-08-31', value: 50000, tier: '成交数据', display: '小区甲' },
+      { date: '2026-09-28', value: 48000, tier: '成交数据', display: '小区甲' },
+      { date: '2026-10-26', value: 48300, tier: '挂牌数据', display: '小区甲' },
+    ]],
+    ['小区乙', [
+      { date: '2026-08-31', value: 60000, tier: '成交数据', display: '小区乙' },
+      { date: '2026-09-28', value: 60200, tier: '成交数据', display: '小区乙' },
+    ]],
+    ['小区丙', [
+      { date: '2026-09-01', value: 40000, tier: '成交数据', display: '小区丙' },
+      { date: '2026-09-02', value: 40000, tier: '成交数据', display: '小区丙' },
+    ]],
+    ['小区丁', [
+      { date: '2026-08-31', value: 80000, tier: '成交数据', display: '小区丁' },
+      { date: '2026-09-28', value: 81200, tier: '成交数据', display: '小区丁' },
+    ]],
+  ]);
+  const weeklyById = new Map([
+    ['小区甲', { weekly }],
+    ['小区乙', { weekly }],
+    ['小区丙', { weekly: [] }],
+    ['小区丁', { weekly }],
+  ]);
+  const r = calibrate(anchors, weeklyById);
+  eq('比较计数与命中率', [r.n, r.hits, r.hit_rate, r.badge], [2, 1, 0.5, 'uncalibrated']);
+  eq('排除显式计数（档位/空窗/平坦各 1）', r.excluded, { low_tier: 1, no_overlap: 1, flat: 1 });
+  const byComm = Object.fromEntries(r.comparisons.map((c) => [c.community + c.from, c]));
+  eq('miss 比较（方向相反）', [byComm['小区甲2026-08-31'].result, byComm['小区甲2026-08-31'].anchor_delta_pct, byComm['小区甲2026-08-31'].index_cum_pct], ['miss', -4, 1]);
+  eq('hit 比较（同向）', byComm['小区丁2026-08-31'].result, 'hit');
+  eq('flat 排除（|Δ|<0.5%）', r.comparisons.find((c) => c.community === '小区乙' && c.result === 'excluded:flat')?.anchor_delta_pct, 0.3);
+  eq('no_overlap 排除（窗口内无指数周）', r.comparisons.find((c) => c.result === 'excluded:no_overlap')?.community, '小区丙');
+}
+
+// buildSnapshot 集成：同一小区两时点成交档锚点 + 盘口事件齐备 → 1 次评分比较
+{
+  const cal = (unit, pct) => ({ anchor: { tier: '成交数据', n_samples: 2, range_pct: 1 }, listing_vs_anchor_pct: pct, verdict: 'near_deal', note: '' });
+  const btRecords = [
+    // 三套在售实体两周降价（W40 三个幅度事件 → 该周指数 = median(-2.04,-2,-2) = -2）
+    tRec('fang', 'ba1', '2026-09-01', 50000, { community: '回测小区', area: 101 }),
+    tRec('fang', 'ba1', '2026-09-29', 49000, { community: '回测小区', area: 101 }),
+    tRec('fang', 'bb2', '2026-09-01', 48000, { community: '回测小区', area: 89, layout: '2室1厅' }),
+    tRec('fang', 'bb2', '2026-09-29', 47040, { community: '回测小区', area: 89, layout: '2室1厅' }),
+    tRec('fang', 'bc3', '2026-09-01', 52000, { community: '回测小区', area: 120, layout: '3室2厅', floor: '低楼层(共26层)', year: 2014 }),
+    tRec('fang', 'bc3', '2026-09-29', 50960, { community: '回测小区', area: 120, layout: '3室2厅', floor: '低楼层(共26层)', year: 2014 }),
+    // 锚点载体：d4 两时点带成交档 crosscheck（锚点值 = 挂牌/(1+pct%) 反推：50000 → 49489.8，Δ-1.0%）
+    { ...tRec('fang', 'bd4', '2026-09-01', 51000, { community: '回测小区', area: 105, orient: '东西', year: 2018 }), crosscheck: cal(51000, 2.0) },
+    { ...tRec('fang', 'bd4', '2026-09-29', 48500, { community: '回测小区', area: 105, orient: '东西', year: 2018 }), crosscheck: cal(48500, -2.0) },
+    // 低档锚点（挂牌数据）→ 只计排除，不参与评分
+    { ...tRec('fang', 'bg5', '2026-09-01', 47000, { community: '回测小区', area: 77, layout: '2室1厅', floor: '低楼层(共6层)', year: 1998 }),
+      crosscheck: { anchor: { tier: '挂牌数据', n_samples: 1, range_pct: null }, listing_vs_anchor_pct: 1.0, verdict: 'near_deal', note: '' } },
+  ];
+  const snap = buildSnapshot(btRecords, { today: '2026-09-29' });
+  eq('回测集成：W40 周指数（4 个幅度事件中位数）', snap.communities['回测小区'].weekly.find((w) => w.week === '2026-W40').index, -2);
+  eq('回测集成：1 次评分比较全部命中，低档排除 1',
+    snap.calibration, { n: 1, hit_rate: 1, badge: 'uncalibrated', excluded: { low_tier: 1, no_overlap: 0, flat: 0 } });
+}
+
+// 板块正向门槛（T4 验收：同板块 ≥3 个已索引小区 → 输出板块块）
+{
+  const mk = (tag, unit) => [0, 1, 2].flatMap((i) => {
+    const over = { community: `${tag}小区`, district: '浦东·板块测试', area: 100 + i * 7, layout: i === 1 ? '2室1厅' : '3室1厅', floor: i === 2 ? '高楼层(共33层)' : '低楼层(共18层)', year: 2010 + i };
+    return [
+      tRec('fang', `${tag}x${i}`, '2026-09-01', unit + i * 100, over),
+      tRec('fang', `${tag}x${i}`, '2026-09-29', Math.round((unit + i * 100) * 0.98), over),
+    ];
+  });
+  const snap2 = buildSnapshot([...mk('板A', 50000), ...mk('板B', 60000), ...mk('板C', 40000)], { today: '2026-09-29' });
+  const d = snap2.districts['浦东·板块测试'];
+  has('板块 ≥3 正向门槛（3 个已索引小区 → 输出板块块）', !!d && d.n_communities === 3 && d.index_4w != null);
+  eq('板块内小区全部进入关注池（等权）', snap2.pool.n_communities, 3);
+}
+
+// ---------- 合理价区间（T6 #20：锚点 × 趋势封顶调整 ± 个别因素；退回规则显式） ----------
+
+{
+  eq('区间算术（50000 × (1-2.2%) ± 2%）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: -2.2, factor_pct: 2 }),
+    { ok: true, anchor_value: 50000, anchor_n: 5, index_12w: -2.2, trend_adj_pct: -2.2, factor_pct: 2, center: 48900, low: 47922, high: 49878 });
+  eq('趋势上调封顶 +5%', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 9 }).center, 52500);
+  eq('趋势下调封顶 -5%', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: -9 }).center, 47500);
+  eq('个别因素钳到 [0,5]', [fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0, factor_pct: 12 }).factor_pct,
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0, factor_pct: -3 }).factor_pct], [5, 0]);
+  eq('锚点样本 n=5 边界可出区间', fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: 0 }).ok, true);
+  eq('锚点样本 n=4 → 退回（thin_anchor）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 4, index_12w: 0 }), { ok: false, reason: 'thin_anchor', anchor_n: 4, min: 5 });
+  eq('指数缺失 → 退回（no_index）',
+    fairPriceBand({ anchor_value: 50000, anchor_n: 5, index_12w: null }), { ok: false, reason: 'no_index', anchor_n: 5 });
+  eq('锚点值无效 → invalid_anchor', fairPriceBand({ anchor_value: 0, anchor_n: 5, index_12w: 0 }).reason, 'invalid_anchor');
+}
+
+// ---------- 趋势挂载（T8 #22：新快照挂温度；缺失/过期 → 全 null，不拿旧读数冒充当前） ----------
+
+{
+  const rows = [{ community: '趋势测试小区', score_global: 4 }, { community: '别的小区', score_global: 3 }];
+  const fresh = { snapshot: { communities: { '趋势测试小区': { status: 'indexed', temperature: 'hot', right_side_weeks: 3, n_events_12w: 42 } } }, stale: false, date: '2026-10-19', age_days: 6 };
+  eq('新快照挂载（label 服务端预计算）', attachTrendToHouses(rows, fresh)[0],
+    { community: '趋势测试小区', score_global: 4, trend_temp: 'hot', trend_label: '热', trend_right: 3, trend_events: 42 });
+  eq('未索引小区 → 全 null', attachTrendToHouses(rows, fresh)[1].trend_temp, null);
+  const stale = { ...fresh, stale: true, age_days: 30 };
+  eq('过期快照 → 全 null（不冒充当前）', attachTrendToHouses(rows, stale).map((r) => r.trend_temp), [null, null]);
+  eq('无快照 → 全 null 不崩溃', attachTrendToHouses(rows, null).map((r) => r.trend_temp), [null, null]);
 }
 
 // ---------- 真实性三态（ADR-0002 备注标记解析） ----------
@@ -196,6 +452,25 @@ eq('watchRow legacy 不静默升档', effectiveProvenance({ provenance: 'verifie
 eq('无行回落报告 suspect', effectiveProvenance({ provenance: 'suspect' }, null), 'suspect');
 eq('无行无标记 → legacy（旧实现曾折叠为 verified）', effectiveProvenance({}, null), 'legacy');
 eq('无行报告 void 直通', effectiveProvenance({ provenance: 'void' }, null), 'void');
+
+// ---------- Machine Summary trend 子块（T7 #21：context 层，两处同步的另一半） ----------
+
+{
+  const withTrend = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "013"\ncommunity: 示范小区\nscore_global: 4.1\ntrend:\n  index_4w: -1.2\n  index_12w: -3.4\n  temperature: cold\n  right_side_weeks: 0\n  n_events_12w: 23\n  calibrated: uncalibrated\n  as_of: "2026-10-25"\n  source: "data/trend/index-2026-10-25.json"\nnext_action: 约看\n```');
+  eq('trend 子块解析（数值/字符串/嵌套）', withTrend.trend, {
+    index_4w: -1.2, index_12w: -3.4, temperature: 'cold', right_side_weeks: 0,
+    n_events_12w: 23, calibrated: 'uncalibrated', as_of: '2026-10-25', source: 'data/trend/index-2026-10-25.json',
+  });
+  eq('trend 之后的顶层键不被吞掉', withTrend.next_action, '约看');
+  const legacy = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "001"\nscore_global: 3.9\nunverified_items: []\n```');
+  eq('legacy 报告无 trend 键 → 合法（可选兼容）', 'trend' in legacy, false);
+  eq('legacy 平铺键解析不受影响', [legacy.score_global, Array.isArray(legacy.unverified_items)], [3.9, true]);
+  const broken = parseMachineSummary('## Machine Summary\n```yaml\ntrend:\nindex_4w: -1\nscore_global: 4\n```');
+  eq('未缩进的 trend 块不误吞顶层键（容错）', [broken.trend, broken.score_global], [{}, 4]);
+}
+
+// loadTrendSnapshot：CI 无用户数据 → 目录不存在返回 null（stats 冒烟依赖此路径）
+eq('loadTrendSnapshot 缺目录 → null（不崩溃）', await loadTrendSnapshot(join(ROOT, 'data', 'trend-not-exist')), null);
 
 // ---------- 决策分层唯一实现（decision.mjs：四档 pill / 状态标签 / 标记档） ----------
 
@@ -242,9 +517,18 @@ eq('conclusion 未知回原值', conclusionLabel('mystery'), 'mystery');
       const want = decide(d);
       return ['tier', 'markerCls', 'tag', 'tagCls', 'risk'].every(k => d.decision[k] === want[k]);
     }), true);
+  // T8：DEMO 趋势字段与 TREND_TEMP_LABEL 语义一致（温度键合法、label 与 temp 配对、计数为数值或空）
+  has('DEMO 趋势字段与温度标签表一致（防漂移）',
+    DEMO_HOUSES.every(dh => dh.trend_temp == null || (
+      !!TREND_TEMP_LABEL[dh.trend_temp]
+      && dh.trend_label === TREND_TEMP_LABEL[dh.trend_temp]
+      && (dh.trend_right == null || typeof dh.trend_right === 'number')
+      && (dh.trend_events == null || typeof dh.trend_events === 'number'))), true);
   const html = renderMapHtml({ initialData: { reports: [], watchlist: [], profile: null, rawYaml: '', geoCache: {} }, config: {} });
   eq('PROFILE_FIELDS 表单 id 全部存在于页面骨架',
     PROFILE_FIELDS.every(f => (Array.isArray(f.form) ? f.form : f.form ? [f.form] : []).every(id => html.includes(`id="${id}"`))), true);
+  has('详情卡有盘口趋势行（m-trend-line）', html.includes('id="m-trend-line"'), true);
+  has('温度不再经页面查找表（label 服务端预计算，页面无 TREND_TEMP_LABEL）', !html.includes('TREND_TEMP_LABEL'), true);
 }
 
 // ---------- profile 契约（C4：键表驱动 parse/update 对称 + 往返 golden） ----------
@@ -531,11 +815,68 @@ const matrix = [
   ['https://shanghai.anjuke.com/prop/view/A1686520304', { platform: 'anjuke', page_type: 'listing', city_code: 'shanghai', listing_id: 'A1686520304' }],
   ['https://bj.5i5j.com/ershoufang/9876543.html', { platform: '5i5j', page_type: 'listing', city_code: 'bj', listing_id: '9876543' }],
   ['https://sh.esf.fang.com/chushou/3_511432907.htm', { platform: 'fang', page_type: 'listing', city_code: 'sh', listing_id: '3_511432907' }],
+  ['https://www.fang.com/xiaoqu/sh-1211107674', { platform: 'fang', page_type: 'community', city_code: 'sh', listing_id: '1211107674' }],
+  ['https://sh.esf.fang.com/loupan/1210031493.htm', { platform: 'fang', page_type: 'community', city_code: 'sh', listing_id: '1210031493' }],
+  ['https://newhouse.fang.com/loupan/1210031493/', { platform: 'fang', page_type: 'new_home', city_code: 'newhouse', listing_id: '1210031493' }],
   ['https://example.com/x', { platform: 'generic', page_type: 'unknown', city_code: null, listing_id: null }],
 ];
 for (const [url, want] of matrix) eq(`detect ${url.slice(8, 48)}`, detectOne(url), want);
 eq('liftMobileCity（m 子域城市提升）', liftMobileCity('m', 'sh/ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
 eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.html'), ['sh', 'ershoufang/1.html']);
+
+// ---------- 自动复扫（T9 #23：计划/提取/记录组装——canned fixture，无网络） ----------
+
+{
+  // canned fixture 按 2026-10-26 实测标记造：详情页 price_esf/元/平米/JSON-LD/面包屑；小区页 meta Description
+  const listingHtml = '<div class="trl-item price_esf sty1"><i>568</i>万 </div>'
+    + '59019元/平米<div class="tt"> 2室2厅1卫 </div>共11层'
+    + '"建筑面积","value":"96.24㎡"'
+    + '"挂牌时间","value":"2026-05-06"'
+    + '<a href="/loupan/1210031493.htm" id="juhexq_A01_01_05" class="blue"> 由由新邸</a>';
+  const exL = extractFangListing(listingHtml);
+  eq('listing 提取（总价/单价/面积/户型/楼层/挂牌时间/小区名）', exL.status === 'ok' && exL.listing, {
+    total_price_wan: 568, unit_price: 59019, area_sqm: 96.24,
+    layout: '2室2厅1卫', floor: '共11层', listed_at: '2026-05-06',
+  });
+  eq('listing 小区名与小区 ID（面包屑第二捕获组）', [exL.community, exL.community_id], ['由由新邸', '1210031493']);
+
+  const brokenHtml = '<html><body>页面改版了，没有任何已知锚点</body></html>';
+  const exBroken = extractFangListing(brokenHtml);
+  eq('布局变更 → parse_failed 且缺项显式（不编数字）',
+    [exBroken.status, exBroken.missing], ['parse_failed', ['total_price_wan', 'unit_price', 'area_sqm', 'community']]);
+
+  const communityHtml = 'content="上海由由新邸小区网，参考均价：60609元/㎡，位于浦东北蔡，现有二手房源4套，竣工时间2001-01-01年，小区地址是严桥路58弄"'
+    + '<div>09月参考均价</div>';
+  const exC = extractFangCommunity(communityHtml);
+  eq('community 提取（参考均价/月份/在售套数/竣工年代）', exC, {
+    status: 'ok', reference: { unit_price: 60609, as_of_month: '09月参考价' }, listing_count: 4, built_year: 2001,
+  });
+  eq('community 参考价缺失 → parse_failed', extractFangCommunity('<html>无价格</html>').status, 'parse_failed');
+
+  // 计划器：去重/分类/预算截断/不支持平台显式计数
+  const scrapers = await loadScrapers(join(ROOT, 'scrapers'));
+  const urls = [
+    'https://sh.esf.fang.com/chushou/3_511432907.htm',
+    'https://sh.esf.fang.com/chushou/3_511432907.htm', // 重复 → 去重
+    'https://sh.esf.fang.com/loupan/1210031493.htm',
+    'https://shanghai.anjuke.com/prop/view/A1686520304', // 非房天下 → unsupported
+  ];
+  const plan = planRescan(urls, scrapers, { maxFetches: 2 });
+  eq('计划器（去重 2 条 + 预算内截断 + unsupported 显式）',
+    [plan.fetches.length, plan.skipped_cap, plan.unsupported.length, plan.unsupported[0].includes('anjuke')], [2, 0, 1, true]);
+  eq('计划器 kinds', plan.fetches.map((f) => f.kind).sort().join(','), 'community,listing');
+  const plan15 = planRescan(Array.from({ length: 15 }, (_, i) => `https://sh.esf.fang.com/chushou/9_${i}.htm`), scrapers);
+  eq('预算硬上限 12（超额显式计数）', [plan15.fetches.length, plan15.skipped_cap, plan15.cap], [12, 3, 12]);
+  eq('预算口径与 scan 同源（≤12）', RESCAN_BUDGET.max_fetches_per_run, 12);
+  has('抓取节奏 = 下限 + 抖动', scheduleDelay({ minDelayMs: 100, jitterMs: 50, rng: () => 0.5 }) === 125);
+
+  const rec = buildRecord('listing', exL, { url: 'https://sh.esf.fang.com/chushou/8_1020829729.htm', listingId: '8_1020829729', today: '2026-10-26' });
+  eq('记录组装（schema/留痕/页型）',
+    [rec.schema, rec.status, rec.platform, rec.page_type, rec.capture.channel, rec.capture.url_verified, rec.community],
+    ['house-ops.scan/1', 'complete', 'fang', 'listing', 'gha-fetch', true, '由由新邸']);
+  const recC = buildRecord('community', exC, { url: 'https://sh.esf.fang.com/loupan/1210031493.htm', listingId: '1210031493', today: '2026-10-26' });
+  has('community 记录 notes 含校准锚语义', /参考均价 60609 元\/㎡（09月参考价/.test(recC.notes) && /不登记 watchlist/.test(recC.notes));
+}
 
 // ---------- 仓库卫生：文档命令不漂移 / skill 镜像软链完整 ----------
 // 只在「仓库形态」下断言：打包产物里没有 README.md 也没有 .agents/，自动跳过。
@@ -572,6 +913,28 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
     // AGENTS.md 一旦镜像进技能目录，根目录判定会把 PROJECT_ROOT 拽到技能目录里
     const leaked = await stat(join(skillDir, 'AGENTS.md')).then(() => true).catch(() => false);
     has('AGENTS.md 未镜像进技能目录（防 PROJECT_ROOT 掉进去）', leaked === false);
+  }
+
+  // WorkBuddy 市场清单：平台按 SKILL.md 的 frontmatter 校验，缺一个字段就直接拒收 ZIP。
+  // version 又是第五处版本号（前四处见下面 plugin/marketplace/codex），漂移了用户装到的版本
+  // 就和仓库对不上——所以在这里一并钉住，别等到上传才发现。
+  {
+    const skillMd = join(ROOT, '.agents/skills/house-ops/SKILL.md');
+    if (await stat(skillMd).then(() => true).catch(() => false)) {
+      const fmText = /^---\r?\n([\s\S]*?)\r?\n---/.exec(await readFile(skillMd, 'utf8'))?.[1] ?? '';
+      const fm = {};
+      for (const line of fmText.split('\n')) {
+        const kv = /^([a-z][a-z0-9_-]*):(.*)$/i.exec(line);
+        if (kv) fm[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '');
+      }
+      const required = ['name', 'display_name', 'display_name_en', 'description',
+        'description_zh', 'description_en', 'version', 'author'];
+      eq('SKILL.md 含 WorkBuddy 市场必填字段', required.filter((k) => !fm[k]), []);
+      eq('SKILL.md name 是 kebab-case（平台硬规则）', /^[a-z0-9]+(-[a-z0-9]+)*$/.test(fm.name ?? ''), true);
+
+      const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
+      eq('SKILL.md version 与 package.json 一致（第五处版本号）', fm.version, pkg.version);
+    }
   }
 
   // Claude Code 插件清单：仓库根就是 plugin root（.claude-plugin/ 在那儿），
@@ -661,7 +1024,7 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   for (const field of [
     'h.community', 'h.report_no', 'h.district', 'h.type', 'h.score_global',
     'h.total_price_wan', 'h.unit_price', 'h.area_sqm', 'h.built_year', 'h.policy_tax_wan',
-    'd.tag', 'd.tagCls', 'subBits',
+    'd.tag', 'd.tagCls', 'subBits', 'h.trend_label',
   ]) {
     const fieldRe = new RegExp(`\\b${field.replace(/\./g, '\\.')}\\b`);
     const bad = dataInterps.filter(e => fieldRe.test(e) && !e.includes(`esc(${field}`));

@@ -58,6 +58,24 @@ codex plugin marketplace add ohwald/house-ops
 codex plugin add house-ops@house-ops
 ```
 
+WorkBuddy installs from its own skill market — search for **买房决策助手 / House Ops** once the listing is live.
+The upload package is a self-contained ZIP (top level must be `house-ops/`, ≤3MB):
+
+```bash
+node tools/package-skill-wb.mjs   # → dist/house-ops-<version>.zip
+```
+
+In market-managed installs (`~/.workbuddy/skills/house-ops`, `~/.claude/skills/house-ops`, …) your writable
+state lives at `~/house-ops-data` instead of inside the skill folder, so a skill upgrade cannot wipe your
+profile, reports or viewing notes; `scripts/wb-setup.mjs` sets that up once and is idempotent.
+
+The market only accepts `root/one-directory/file` — a third level makes it reject the whole ZIP, so the
+upload copy is flattened: `scripts/lib/` is lifted to `lib/`, `docs/markets/eu.md` becomes
+`docs/markets-eu.md`, and `templates/actions/` moves up one level, with relative imports and documented
+paths rewritten to match. The script then re-reads the ZIP's real entries and resolves every relative
+import, so a newly added third-level directory fails the build instead of failing the upload. The
+repository and the ClawHub package keep their original layout.
+
 Inside this repository the skill is already wired up through `.claude/skills/`, so installing the plugin is only
 needed when you want house-ops in *another* project. Prefer to clone instead?
 
@@ -172,9 +190,10 @@ These run without any agent involved:
 | `node scripts/selftest.mjs` | Golden tests for the scan & decision layer — exit 0 pass, exit 1 failure |
 | `node scripts/stats.mjs [PROJECT_ROOT]` | Score distribution, dimension-level weak spots, authenticity warnings |
 | `node scripts/reserve-report-num.mjs` | Atomically allocate the next report number (`001`, `002`, …) |
+| `node scripts/trend.mjs build` / `show <community>` | Weekly order-book marginal index per community from rescan history — honest `not_enough_data` during cold start |
 | `npm run dashboard` | TUI console above |
 
-Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run insight`, `npm run dashboard`.
+Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run trend`, `npm run insight`, `npm run dashboard`.
 
 ### Scanning & verification (`scripts/scan.mjs`)
 
@@ -185,6 +204,16 @@ node scripts/scan.mjs crosscheck <record.json> [--write]       # listing price v
 node scripts/scan.mjs official [城市]                           # registered government open-data sources
 node scripts/scan.mjs history [关键词] [--stale-days N]         # no arg = tracking freshness table; arg = single-property timeline & seller strategy signals
 node scripts/scan.mjs verify <record.json> [--evidence ev.json] # authenticity decision table + provenance verdict
+```
+
+### Trend readouts (`scripts/trend.mjs`)
+
+Weekly community-level index from order-book marginal events: price changes, new listings and delistings inferred by diffing rescan snapshots (delistings count as supply only — never as sales). Weeks with fewer than 3 magnitude events read `not_enough_data` — silence is not stability. Aggregation caps at your watch pool (districts need ≥3 indexed communities; no city-level index, ADR-0003), and trend signals never enter the score (ADR-0004) — they feed negotiation timing and the map.
+
+```bash
+node scripts/trend.mjs build                  # recompute weekly indices → data/trend/index-{date}.json (append-only)
+node scripts/trend.mjs show <community>       # readout card: 4w/12w cumulative, temperature, right-side weeks, events
+node scripts/trend.mjs backtest               # calibration: anchor-direction vs index-direction comparison table
 ```
 
 ### Physical inference (`scripts/insight.mjs`)
@@ -251,7 +280,7 @@ Score tiers: **≥4.5 strongly recommended** · **4.0–4.4 worth a viewing** ·
 | Anjuke / 5i5j / Fang.com (安居客/我爱我家/房天下) | ✅ | ❌ estimates only (auto-downgraded, never inflated) |
 | Others | generic fallback template | per generic checklist |
 
-> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms.
+> **Compliance stance**: personal research only, manual pace, respect platform terms — no bulk scraping, no captcha/login bypass, no redistribution of page data. This is an independent personal tool, **not affiliated with or endorsed by any platform**; listing data belongs to the platforms. Fork owners may additionally opt into a **low-frequency automated rescan inside their own (private) fork** — see [docs/automated-rescan.md](docs/automated-rescan.md); the upstream repo ships the kit as an inert template, runs nothing itself, and deployment owners own compliance in their deployment.
 
 ## Market coverage
 
@@ -396,6 +425,22 @@ codex plugin marketplace add ohwald/house-ops
 codex plugin add house-ops@house-ops
 ```
 
+WorkBuddy 走它自己的技能市场：上架后在技能市场搜「买房决策助手」即可安装。要自己打包上传，用：
+
+```bash
+node tools/package-skill-wb.mjs   # → dist/house-ops-<version>.zip
+```
+
+受管安装形态（`~/.workbuddy/skills/house-ops`、`~/.claude/skills/house-ops` 等）下，可写的用户数据
+落在 `~/house-ops-data` 而不是技能目录里，技能升级不会覆盖画像、报告和带看记录；
+`scripts/wb-setup.mjs` 负责一次性外置，重复运行安全。
+
+市场包另有硬约束：平台只接受「根/一级目录/文件」，第三层会让整个 ZIP 解析失败。所以上传副本会被
+压平——`scripts/lib/` 提到包根 `lib/`（`scripts/` 下已有同名 `rescan/trend`，直接并入会互相覆盖），
+`docs/markets/eu.md` 变成 `docs/markets-eu.md`，`templates/actions/` 上提一层——相对 import 和文档里
+的路径一并改写。打包最后会按 ZIP 的真实条目复查层级、逐个解析相对 import，所以以后新增三层目录是
+**打包报错**，不是上传后才被发现。仓库与 ClawHub 形态保持原结构，不受影响。
+
 在本仓库里技能已通过 `.claude/skills/` 直接可用，所以只有想在**别的项目**里用 house-ops 时才需要装插件。也可以直接克隆：
 
 ```bash
@@ -509,9 +554,10 @@ npm install && COLUMNS=90 node scripts/dashboard.mjs docs/examples/fixture
 | `node scripts/selftest.mjs` | scan / decision 层 golden 测试：通过 exit 0，失败 exit 1 |
 | `node scripts/stats.mjs [PROJECT_ROOT]` | 评分区间、低分维度排行、真实性告警 |
 | `node scripts/reserve-report-num.mjs` | 原子分配下一个报告编号（`001`、`002`…） |
+| `node scripts/trend.mjs build` / `show <小区>` | 周度盘口边际指数（来自复扫历史），冷启动期如实 `not_enough_data` |
 | `npm run dashboard` | 上面的 TUI 操作台 |
 
-以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `insight` / `dashboard`。
+以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `trend` / `insight` / `dashboard`。
 
 ### 扫描与验真（`scripts/scan.mjs`）
 
@@ -522,6 +568,16 @@ node scripts/scan.mjs crosscheck <record.json> [--write]        # 挂牌价 vs �
 node scripts/scan.mjs official [城市]                            # 查政务公开数据源登记表
 node scripts/scan.mjs history [关键词] [--stale-days N]          # 无参=追踪时效表；带关键词=单房源时间线与房东策略信号
 node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性判定表 + provenance 建议
+```
+
+### 趋势读数（`scripts/trend.mjs`）
+
+由盘口边际事件（调价/新挂牌/下架，从复扫快照对比推断；下架只计供给、不当成交）生成的周度小区指数。周幅度事件 <3 如实输出 `not_enough_data`——沉默 ≠ 稳定。聚合封顶关注池（板块需 ≥3 个已索引小区；无城市级指数，ADR-0003），趋势信号不进六维评分（ADR-0004），只服务议价时机与地图呈现。
+
+```bash
+node scripts/trend.mjs build                  # 重算周度指数 → data/trend/index-{date}.json（追加式）
+node scripts/trend.mjs show <小区关键词>       # 读数卡：近4/12周累计、温度、右侧周数、事件数
+node scripts/trend.mjs backtest               # 校准回测：锚点方向 vs 指数方向比较表
 ```
 
 ### 物理推算（`scripts/insight.mjs`）
@@ -586,7 +642,7 @@ intake 建画像 → 看到候选 → triage 速筛 → scan 验真+采价
 | 安居客 / 我爱我家 / 房天下 | ✅ | ❌ 仅估算行情（自动降档，宁降档不虚标） |
 | 其他平台 | generic 兜底清单 | 按通用清单采集 |
 
-> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发页面数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。
+> **合规底线**：仅限个人购房研究、手动节奏、遵守平台条款，不绕验证码/登录墙，不公开再分发页面数据。本项目为独立个人工具，**与任何平台无隶属或背书关系**，房源数据归各平台所有。fork 用户可以在**自己的私有 fork** 内另行启用低频自动复扫（模板见 [docs/automated-rescan.md](docs/automated-rescan.md)）：上游只提供惰性模板、自身不运行任何采集，部署方自行承担其部署中的合规责任。
 
 ## 市场覆盖范围
 

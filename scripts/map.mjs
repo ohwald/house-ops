@@ -11,10 +11,11 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { collectReports, parseWatchlist, effectiveProvenance, num } from './lib/data.mjs';
+import { collectReports, parseWatchlist, effectiveProvenance, num, loadTrendSnapshot } from './lib/data.mjs';
 import { parseProfile } from './lib/profile.mjs';
 import { loadGeoCache } from './lib/geo.mjs';
 import { decide, isUserExcluded } from './lib/decision.mjs';
+import { attachTrendToHouses } from './lib/trend.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,11 +65,17 @@ async function loadFullData() {
     geoCache = await loadGeoCache(join(ROOT, 'data', '.geo-cache.json'));
   }
 
-  const [reports, watchlist, rawProfile] = await Promise.all([
+  const [reports, watchlist, rawProfile, trendInfo] = await Promise.all([
     collectReports(join(ROOT, 'reports')),
     parseWatchlist(join(ROOT, 'data', 'watchlist.md')),
     readFile(PROFILE_PATH, 'utf8').catch(() => ''),
+    // 趋势快照（第三数据源，ADR-0003/0004）：缺失/过期由 attachTrendToHouses 降级（不渲染温度），不崩溃
+    loadTrendSnapshot(join(ROOT, 'data', 'trend')),
   ]);
+  const trendMeta = trendInfo ? {
+    as_of: trendInfo.date, stale: trendInfo.stale, age_days: trendInfo.age_days,
+    badge: trendInfo.snapshot.calibration?.badge ?? 'uncalibrated',
+  } : null;
 
   const parsedProfile = parseProfile(rawProfile);
 
@@ -92,12 +99,15 @@ async function loadFullData() {
         authenticity: effectiveProvenance(r, w),
       };
     })
-    // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染
-    .map(h => ({ ...h, decision: decide(h) }));
+    // 决策分层服务端预计算（scripts/lib/decision.mjs 唯一实现），页面 JS 只渲染；
+    // 趋势字段经 attachTrendToHouses 统一挂载（过期快照 → null，页面显示过期提示而非旧温度）
+    .map(h => ({ ...h, decision: decide(h) }))
+    .map(h => attachTrendToHouses([h], trendInfo)[0]);
 
   return {
     reports: mergedReports,
     watchlist: watchlist || [],
+    trendMeta,
     // 工作锚点由画像驱动（buyer.work_location_coords = [经度, 纬度]，intake 采集或地图页写入）；
     // 未设置时地图不绘制锚点与通勤圈，不内置任何默认位置
     workAnchor: {

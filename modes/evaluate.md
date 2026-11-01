@@ -50,7 +50,8 @@
    - **挂牌-成交真实折价空间**：同类户型实际成交相较挂牌价的折价弹性（测算砍价安全区间，如 3-5% 或 5-8%+）。
    - **去化周期与换手率**：年均换手套数、平均在架成交天数，判断是否存在"流动性陷阱"。
 3. **价格锚点与流动性信号**：按 `_shared.md` 锚点阶梯取最高可得档；结合近 30 天带看与在售去化信号判断供需平衡。
-4. 结论：`低于市场 | 接近市场 | 高于市场` + `筑底企稳 | 阴跌回调 | 溢价偏高` + 议价弹性空间档（紧/正常/宽）。
+4. **合理价区间（趋势叠加，可选）**：锚点样本 ≥5 且小区趋势指数可用时，跑 `node scripts/trend.mjs band --anchor <锚点单价> --samples <n> --index <index_12w> [--factor 0-5]`（个别因素 = 本套硬伤/楼层/朝向的评估结论，0-5%）。**区间叠加在 crosscheck 结论之上，不替换**；锚点样本 <5 或指数 `not_enough_data` 时脚本会拒绝出区间——此时按纯 crosscheck 口径呈现并明示"趋势数据不足"，不硬造区间。报告引用区间时必须携带校准徽章（快照 `calibration.badge`）。
+5. 结论：`低于市场 | 接近市场 | 高于市场` + `筑底企稳 | 阴跌回调 | 溢价偏高` + 议价弹性空间档（紧/正常/宽）。
 
 ## Block D — 地段配套与生活圈四大核心支柱 Location
 
@@ -149,6 +150,16 @@ urban_planning: ""   # positive(有规划红利) | neutral(现状平稳) | uncer
 tradeoff_summary: "" # 核心得失与方案权衡一句话总结
 unverified_items: []
 next_action: ""
+# 以下 trend 块为可选 context 层（ADR-0004：不参与六维评分）；无趋势快照或小区未索引时整块省略
+trend:
+  index_4w: null       # 近4周盘口指数累计 %
+  index_12w: null      # 近12周累计 %
+  temperature: ""      # cold | mild | hot | stalling（快照 communities.<小区>.temperature）
+  right_side_weeks: null
+  n_events_12w: null   # 样本透明：事件数
+  calibrated: ""       # uncalibrated | calibrated | refuted（快照 calibration.badge）
+  as_of: ""
+  source: ""           # data/trend/index-YYYY-MM-DD.json
 ```
 
 ## Post-evaluation

@@ -45,12 +45,13 @@ jobs:
       - name: Golden tests (selftest)
         run: node scripts/selftest.mjs
 
-      - name: CLI smoke — stats / official-source lookup (offline, no network)
+      - name: CLI smoke — stats / official-source lookup / trend (offline, no network)
         run: |
           node scripts/stats.mjs
           node scripts/scan.mjs official --market cn
           node scripts/scan.mjs official --market eu
           node scripts/scan.mjs official --market apac
+          node scripts/trend.mjs build
 
       - name: Map page smoke test
         run: |
