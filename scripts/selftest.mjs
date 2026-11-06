@@ -20,6 +20,7 @@ import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTre
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
 import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
+import { rentYield, RENT_TIER } from './lib/rent-yield.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
@@ -540,6 +541,7 @@ const ALL_KEYS_YAML = 'market:\n  code: x\n  country: x\n  city_local: x\n  curr
   + 'buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\n'
   + 'budget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\n'
   + 'preferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\n'
+  + 'rental:\n  target_monthly_rent: 1\n  target_gross_yield_pct: 2\n'
   + 'thresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n';
 
 const profileYaml = `buyer:
@@ -1105,6 +1107,85 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
       has(`openExternal 拦下恶意/越界目标：${target.slice(0, 26)}`, calls.length === 0 && errs.length === 1);
     }
   }
+}
+
+// ---------- 租售比最小闭环（issue #25）：rentYield 纯函数 ----------
+
+{
+  const r = rentYield({ total_price: 4800000, monthly_rent: 8000, as_of: '2026-11-06' });
+  eq('租售比 1:N（总价/月租）', r.price_to_rent, 600);
+  eq('静态回本年限（总价/年租）', r.payback_years, 50);
+  eq('毛租金收益率（年租/总价）', r.gross_yield_pct, 2);
+  eq('状态 ok', r.status, 'ok');
+}
+
+{
+  const cases = [
+    ['缺月租', { total_price: 4800000 }],
+    ['月租为 0', { total_price: 4800000, monthly_rent: 0 }],
+    ['月租为负', { total_price: 4800000, monthly_rent: -8000 }],
+    ['总价缺失', { monthly_rent: 8000 }],
+    ['总价为 0', { total_price: 0, monthly_rent: 8000 }],
+    ['非数字字符串', { total_price: '480万', monthly_rent: 8000 }],
+  ];
+  for (const [name, input] of cases) {
+    const r = rentYield(input);
+    eq(`${name} → not_evaluated`, r.status, 'not_evaluated');
+    has(`${name} 不产生任何租售比数值`,
+      r.price_to_rent === null && r.payback_years === null && r.gross_yield_pct === null);
+    has(`${name} 给出不估算的理由`, typeof r.reason === 'string' && r.reason.length > 0);
+  }
+}
+
+{
+  const r = rentYield({ total_price: 4800000, monthly_rent: 8000, as_of: '2026-11-06' });
+  eq('档位恒为挂牌数据', [r.tier, RENT_TIER], [RENT_TIER, '挂牌数据']);
+  eq('绝不标成成交锚点', r.is_deal_anchor, false);
+  has('带挂牌口径/非成交锚点说明', /挂牌口径/.test(r.caveat ?? '') && /非成交锚点/.test(r.caveat ?? ''));
+  const over = rentYield({ total_price: 4800000, monthly_rent: 8000, reliability: '成交数据' });
+  eq('传入成交档也被钳制为挂牌档', over.tier, RENT_TIER);
+  eq('低档位（中介口述）→ not_evaluated', rentYield({ total_price: 4800000, monthly_rent: 8000, reliability: '中介口述' }).status, 'not_evaluated');
+  eq('样本不足 → not_evaluated', rentYield({ total_price: 4800000, monthly_rent: 8000, n_samples: 0 }).status, 'not_evaluated');
+}
+
+// ---------- 租售比最小闭环（issue #25）：画像字段契约 ----------
+
+{
+  const fields = PROFILE_FIELDS.filter(f => f.section === 'rental').map(f => f.key).sort();
+  eq('画像契约含 rental 两字段', fields, ['target_gross_yield_pct', 'target_monthly_rent']);
+  const p = parseProfile('rental:\n  target_monthly_rent: 8000\n  target_gross_yield_pct: 2.5\n');
+  eq('画像可读入租金/收益目标', [p.rental?.target_monthly_rent, p.rental?.target_gross_yield_pct], [8000, 2.5]);
+  const empty = parseProfile('rental:\n  target_monthly_rent: null\n  target_gross_yield_pct: null\n');
+  has('缺省 null 不阻断评估', empty.rental?.target_monthly_rent === null && empty.rental?.target_gross_yield_pct === null);
+  const upd = updateProfileFields('rental:\n  target_monthly_rent: null\n  target_gross_yield_pct: null\n',
+    { rental: { target_monthly_rent: 9000, target_gross_yield_pct: 3 } });
+  eq('画像字段可安全回写且无 unknown', [upd.applied.includes('rental.target_monthly_rent'), upd.unknown.length], [true, 0]);
+}
+
+// ---------- 租售比最小闭环（issue #25）：Machine Summary 兼容 + 文档契约 ----------
+
+{
+  const withRent = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "099"\nscore_global: 4.1\n'
+    + 'rent_monthly: 8000\nrent_price_to_rent: 600\nrent_payback_years: 50\nrent_gross_yield_pct: 2\n'
+    + 'rent_tier: "挂牌数据"\nrent_as_of: "2026-11-06"\nrent_status: ok\nunverified_items: []\n```');
+  eq('含 rent_* 字段能解析', [withRent.rent_monthly, withRent.rent_price_to_rent, withRent.rent_payback_years, withRent.rent_gross_yield_pct], [8000, 600, 50, 2]);
+  eq('档位/as_of/status 解析', [withRent.rent_tier, withRent.rent_as_of, withRent.rent_status], ['挂牌数据', '2026-11-06', 'ok']);
+  const legacy = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "001"\nscore_global: 3.9\n```');
+  eq('旧报告无 rent_* 键 → 合法（可选兼容）', 'rent_monthly' in legacy, false);
+  eq('旧报告既有字段不受影响', legacy.score_global, 3.9);
+}
+
+{
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享评分口径写明租金档位上限', /租金最高只到「挂牌数据」档/.test(shared));
+  has('共享评分口径写明与成交锚点隔离', /不得进入成交锚点/.test(shared));
+  const evaluate = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  for (const k of ['rent_monthly', 'rent_price_to_rent', 'rent_payback_years', 'rent_gross_yield_pct', 'rent_tier', 'rent_as_of', 'rent_status']) {
+    has(`evaluate.md schema 含 ${k}`, evaluate.includes(k));
+  }
+  const example = await readFile(join(ROOT, 'config', 'profile.example.yml'), 'utf8').catch(() => '');
+  has('模板含 rental 段', /^rental:/m.test(example));
+  has('模板含两个画像键', example.includes('target_monthly_rent') && example.includes('target_gross_yield_pct'));
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');

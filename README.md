@@ -191,9 +191,10 @@ These run without any agent involved:
 | `node scripts/stats.mjs [PROJECT_ROOT]` | Score distribution, dimension-level weak spots, authenticity warnings |
 | `node scripts/reserve-report-num.mjs` | Atomically allocate the next report number (`001`, `002`, …) |
 | `node scripts/trend.mjs build` / `show <community>` | Weekly order-book marginal index per community from rescan history — honest `not_enough_data` during cold start |
+| `node scripts/rent.mjs --price <whole> --rent <whole/month>` | Price-to-rent ratio, static payback years, gross rental yield — listing-tier only, never a deal anchor |
 | `npm run dashboard` | TUI console above |
 
-Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run trend`, `npm run insight`, `npm run dashboard`.
+Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run trend`, `npm run rent`, `npm run insight`, `npm run dashboard`.
 
 ### Scanning & verification (`scripts/scan.mjs`)
 
@@ -214,6 +215,14 @@ Weekly community-level index from order-book marginal events: price changes, new
 node scripts/trend.mjs build                  # recompute weekly indices → data/trend/index-{date}.json (append-only)
 node scripts/trend.mjs show <community>       # readout card: 4w/12w cumulative, temperature, right-side weeks, events
 node scripts/trend.mjs backtest               # calibration: anchor-direction vs index-direction comparison table
+```
+
+### Rent yield (`scripts/rent.mjs`)
+
+Static listing-tier rental metrics: price-to-rent ratio (1:N), static payback years and gross rental yield. Rent tops out at the `挂牌数据` tier — output is always tagged "listing-tier, not a deal anchor" and never feeds deal anchors or fair-price bands. Missing rent, insufficient samples or a lower reliability tier yields `not_evaluated` rather than an estimate.
+
+```bash
+node scripts/rent.mjs --price 4800000 --rent 8000 --as-of 2026-11-06
 ```
 
 ### Physical inference (`scripts/insight.mjs`)
@@ -555,9 +564,10 @@ npm install && COLUMNS=90 node scripts/dashboard.mjs docs/examples/fixture
 | `node scripts/stats.mjs [PROJECT_ROOT]` | 评分区间、低分维度排行、真实性告警 |
 | `node scripts/reserve-report-num.mjs` | 原子分配下一个报告编号（`001`、`002`…） |
 | `node scripts/trend.mjs build` / `show <小区>` | 周度盘口边际指数（来自复扫历史），冷启动期如实 `not_enough_data` |
+| `node scripts/rent.mjs --price <整额> --rent <整额/月>` | 租售比 / 静态回本年限 / 毛租金收益率，仅挂牌档、非成交锚点 |
 | `npm run dashboard` | 上面的 TUI 操作台 |
 
-以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `trend` / `insight` / `dashboard`。
+以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `trend` / `rent` / `insight` / `dashboard`。
 
 ### 扫描与验真（`scripts/scan.mjs`）
 
@@ -578,6 +588,14 @@ node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性判�
 node scripts/trend.mjs build                  # 重算周度指数 → data/trend/index-{date}.json（追加式）
 node scripts/trend.mjs show <小区关键词>       # 读数卡：近4/12周累计、温度、右侧周数、事件数
 node scripts/trend.mjs backtest               # 校准回测：锚点方向 vs 指数方向比较表
+```
+
+### 租售比（`scripts/rent.mjs`）
+
+挂牌口径的静态租金指标：租售比（1:N）、静态回本年限、毛租金收益率。租金最高只到「挂牌数据」档，输出恒标注「挂牌口径、非成交锚点」，不得进入成交锚点或合理价区间。租金缺失、样本不足或档位更低时输出 `not_evaluated`，绝不估算。
+
+```bash
+node scripts/rent.mjs --price 4800000 --rent 8000 --as-of 2026-11-06
 ```
 
 ### 物理推算（`scripts/insight.mjs`）

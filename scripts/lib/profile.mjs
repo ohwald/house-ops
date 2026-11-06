@@ -34,6 +34,8 @@ export const PROFILE_FIELDS = [
   { section: 'preferences', key: 'size_range_sqm', kind: 'array2', form: ['p-area-min', 'p-area-max'] },
   { section: 'preferences', key: 'building_age_max', kind: 'number' },
   { section: 'preferences', key: 'elevator_required', kind: 'bool' },
+  { section: 'rental', key: 'target_monthly_rent', kind: 'numberOrNull' },
+  { section: 'rental', key: 'target_gross_yield_pct', kind: 'numberOrNull' },
   { section: 'thresholds', key: 'deep_dive_min', kind: 'number', default: 4.0, form: 'p-threshold-deep' },
   { section: 'thresholds', key: 'give_up_below', kind: 'number', default: 3.5, form: 'p-threshold-giveup' },
 ];
