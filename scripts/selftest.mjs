@@ -540,6 +540,7 @@ const ALL_KEYS_YAML = 'market:\n  code: x\n  country: x\n  city_local: x\n  curr
   + '  tenure_preference: x\n  min_lease_years: 1\n'
   + 'buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\n'
   + 'budget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\n'
+  + 'intent:\n  primary_goal: x\n  secondary_goals: x\n  lifecycle_stage: x\n  budget_posture: x\n  goal_confidence: x\n'
   + 'preferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\n'
   + 'rental:\n  target_monthly_rent: 1\n  target_gross_yield_pct: 2\n'
   + 'thresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n';
@@ -1186,6 +1187,52 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   const example = await readFile(join(ROOT, 'config', 'profile.example.yml'), 'utf8').catch(() => '');
   has('模板含 rental 段', /^rental:/m.test(example));
   has('模板含两个画像键', example.includes('target_monthly_rent') && example.includes('target_gross_yield_pct'));
+}
+
+// ---------- 意图分型（issue #31）：画像字段契约 ----------
+
+{
+  const fields = PROFILE_FIELDS.filter(f => f.section === 'intent').map(f => f.key).sort();
+  eq('画像契约含 intent 五字段', fields,
+    ['primary_goal', 'secondary_goals', 'lifecycle_stage', 'budget_posture', 'goal_confidence'].sort());
+  const p = parseProfile('intent:\n  primary_goal: education\n  secondary_goals: investment, owner_occupy\n'
+    + '  lifecycle_stage: upgrade\n  budget_posture: constrained\n  goal_confidence: exploring\n');
+  eq('画像可读入五类意图信息',
+    [p.intent?.primary_goal, p.intent?.secondary_goals, p.intent?.lifecycle_stage, p.intent?.budget_posture, p.intent?.goal_confidence],
+    ['education', 'investment, owner_occupy', 'upgrade', 'constrained', 'exploring']);
+}
+
+{
+  // 回归保护：字段契约已在上一片落地，这些断言防止未来破坏
+  const legacy = parseProfile('intent:\n  purpose: own_stay\n');
+  has('旧画像缺新字段不阻断且不臆造',
+    legacy.intent?.primary_goal === null && legacy.intent?.secondary_goals === null
+    && legacy.intent?.lifecycle_stage === null && legacy.intent?.budget_posture === null
+    && legacy.intent?.goal_confidence === null);
+  const upd = updateProfileFields(
+    'intent:\n  primary_goal: ""\n  secondary_goals: ""\n  lifecycle_stage: ""\n  budget_posture: ""\n  goal_confidence: ""\n',
+    { intent: { primary_goal: 'education', goal_confidence: 'firm' } });
+  eq('意图字段可安全回写且无 unknown', [upd.applied.length, upd.unknown.length], [2, 0]);
+  eq('回写后 firm 生效', parseProfile(upd.text).intent?.goal_confidence, 'firm');
+
+  // 文档/语义契约：本片红灯来源
+  const example = await readFile(join(ROOT, 'config', 'profile.example.yml'), 'utf8').catch(() => '');
+  for (const k of ['primary_goal', 'secondary_goals', 'lifecycle_stage', 'budget_posture', 'goal_confidence']) {
+    has(`模板含 ${k}`, example.includes(k));
+  }
+  const intake = await readFile(join(ROOT, 'modes', 'intake.md'), 'utf8').catch(() => '');
+  has('intake 有意图分型轮', /意图分型轮/.test(intake));
+  has('intake 写明跳过/未定记 exploring', /exploring/.test(intake));
+  const semantic = await readFile(join(ROOT, 'modes', '_profile.template.md'), 'utf8').catch(() => '');
+  has('语义模板含意图分型节', /## 意图分型/.test(semantic));
+  has('语义模板明确非交易状态（ADR-0001）', /ADR-0001/.test(semantic));
+  const brief = await readFile(join(ROOT, 'modes', '_brief.template.md'), 'utf8').catch(() => '');
+  has('速筛模板含主诉求与次诉求', brief.includes('主诉求') && brief.includes('次诉求'));
+  // GLOSSARY.md 是仓库根文件，不在分发副本里；缺文件时跳过，仓库形态仍断言
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) {
+    has('术语表含主诉求与意图确定度', glossary.includes('**主诉求**') && glossary.includes('**意图确定度**'));
+  }
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');

@@ -6,6 +6,14 @@
 
 <!-- 如：三口之家+奶奶同住，女儿 2028 年上小学 -->
 
+## 意图分型（速筛用）
+
+<!-- 主诉求：education / investment / owner_occupy
+     次诉求：__（逗号分隔，可空）
+     生命周期：first_home / upgrade / investment_only
+     预算姿态：unconstrained / balanced / constrained
+     意图确定度：firm / exploring（摇摆时后续可再确认） -->
+
 ## 硬门槛（速筛三问的答案）
 
 - 预算：区间 [__, __]，walk-away __ 万
