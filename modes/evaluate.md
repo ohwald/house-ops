@@ -51,7 +51,8 @@
    - **去化周期与换手率**：年均换手套数、平均在架成交天数，判断是否存在"流动性陷阱"。
 3. **价格锚点与流动性信号**：按 `_shared.md` 锚点阶梯取最高可得档；结合近 30 天带看与在售去化信号判断供需平衡。
 4. **合理价区间（趋势叠加，可选）**：锚点样本 ≥5 且小区趋势指数可用时，跑 `node scripts/trend.mjs band --anchor <锚点单价> --samples <n> --index <index_12w> [--factor 0-5]`（个别因素 = 本套硬伤/楼层/朝向的评估结论，0-5%）。**区间叠加在 crosscheck 结论之上，不替换**；锚点样本 <5 或指数 `not_enough_data` 时脚本会拒绝出区间——此时按纯 crosscheck 口径呈现并明示"趋势数据不足"，不硬造区间。报告引用区间时必须携带校准徽章（快照 `calibration.badge`）。
-5. 结论：`低于市场 | 接近市场 | 高于市场` + `筑底企稳 | 阴跌回调 | 溢价偏高` + 议价弹性空间档（紧/正常/宽）。
+5. **租售比与静态回本年限（挂牌口径，可选）**：按 `_shared.md`「租金口径」节，取本套的挂牌月租样本，跑 `node scripts/rent.mjs --price <本币整额> --rent <本币整额/月> --as-of <YYYY-MM-DD>` 得到租售比（1:N）、静态回本年限与毛租金收益率。报告必须同时标注「挂牌口径、非成交锚点」、可靠度档位与 `as_of`；样本不足 / 档位不足 / 数值缺失时记 `— not evaluated`，把「挂牌租金口径」写入 `unverified_items`，**绝不估算租金**。该读数**不替换**成交锚点或合理价区间结论，也不进入 Price 的成交对照。
+6. 结论：`低于市场 | 接近市场 | 高于市场` + `筑底企稳 | 阴跌回调 | 溢价偏高` + 议价弹性空间档（紧/正常/宽）。
 
 ## Block D — 地段配套与生活圈四大核心支柱 Location
 
@@ -150,6 +151,14 @@ urban_planning: ""   # positive(有规划红利) | neutral(现状平稳) | uncer
 tradeoff_summary: "" # 核心得失与方案权衡一句话总结
 unverified_items: []
 next_action: ""
+# 以下租售比字段为可选（挂牌口径，非成交锚点）；无挂牌租金或样本不足时记 not_evaluated，数值留 null
+rent_monthly: null          # 挂牌月租（本币整额/月）
+rent_price_to_rent: null    # 1:N 的 N = 总价 / 月租
+rent_payback_years: null    # 静态回本年限 = 总价 / 年租
+rent_gross_yield_pct: null  # 毛租金收益率 %
+rent_tier: ""               # 恒为 挂牌数据
+rent_as_of: ""              # 租金口径日期
+rent_status: ""             # ok | not_evaluated
 # 以下 trend 块为可选 context 层（ADR-0004：不参与六维评分）；无趋势快照或小区未索引时整块省略
 trend:
   index_4w: null       # 近4周盘口指数累计 %

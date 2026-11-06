@@ -71,6 +71,10 @@ intent:
   timeline: ""                 # 计划购入/入住时间，如：1 年内
   holding_horizon_years: null  # 预计持有年限（投资/流通性判断用）
 
+rental:                          # 租金/收益目标（可选；缺省不阻断评估）
+  target_monthly_rent: null      # 挂牌月租参考值（本币整额/月），用于租售比推演
+  target_gross_yield_pct: null   # 毛租金收益率目标（%），供收益率对照
+
 preferences:
   layout: ""                   # 户型，如：三居两卫（孩子+老人同住通常 ≥3 居）
   size_range_sqm: [null, null] # 面积区间；单位按 market.area_unit（sqm = ㎡，sqft = 平方英尺）
