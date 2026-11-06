@@ -18,7 +18,7 @@
 
 | 路径 | 内容 |
 |---|---|
-| `config/profile.yml` | 购房需求画像（`market:` 市场与单位口径 + 预算/城市/资格/偏好/权重），从 `profile.example.yml` 生成 |
+| `config/profile.yml` | 购房需求画像（`market:` 市场与单位口径 + 预算/城市/资格/意图分型/偏好/权重），从 `profile.example.yml` 生成 |
 | `modes/_profile.md` | 画像的语义补充（生活方式、一票否决规则、权重取舍理由） |
 | `modes/_custom.md` | 家规：用户对流程/评分规则的个性化覆盖 |
 | `data/` | 运行时状态：`watchlist.md`（关注清单）、`notes/`（带看记录等） |
@@ -35,7 +35,7 @@
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
-| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段与 `market:` 多市场段） |
+| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段、`intent:` 意图分型段与 `market:` 多市场段） |
 | `templates/` | 政策数据表 `policy-notes.{cn,eu,apac}.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.{cn,eu,apac}.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
