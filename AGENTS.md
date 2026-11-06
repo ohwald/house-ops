@@ -96,7 +96,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `modes/_shared.md` | 评分体系六维定义、配套分级参考、小区软素质信号、分档解读、全局 NEVER/ALWAYS、SoT 表——评估类模式必读 |
+| `modes/_shared.md` | 评分体系六维定义、主诉求路由表、配套分级参考、小区软素质信号、分档解读、全局 NEVER/ALWAYS、SoT 表——评估类模式必读 |
 | `modes/intake.md` | 多轮对话采集购房需求（市场与单位口径→家庭结构→衍生需求翻译），生成 `config/profile.yml` + `modes/_profile.md` + `modes/_brief.md` |
 | `modes/evaluate.md` | 单房源六维评级，产出报告并登记 watchlist；Machine Summary schema 的 SoT |
 | `modes/triage.md` | 60 秒快速速筛（`_brief.md` 三问），不落报告 |

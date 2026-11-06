@@ -20,6 +20,7 @@ import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTre
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
 import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
+import { routeFor, INTENT_ROUTES } from './lib/intent-routing.mjs';
 import { rentYield, RENT_TIER } from './lib/rent-yield.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
@@ -1233,6 +1234,61 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   if (glossary) {
     has('术语表含主诉求与意图确定度', glossary.includes('**主诉求**') && glossary.includes('**意图确定度**'));
   }
+}
+
+// ---------- 主诉求路由（issue #32）：routeFor 纯函数 ----------
+
+{
+  for (const [goal, label, kw] of [
+    ['education', '教育', /学区|施教区/],
+    ['investment', '投资', /成交锚点|租售比/],
+    ['owner_occupy', '自住', /配套|户型/],
+  ]) {
+    const r = routeFor(goal);
+    eq(`${label}主导 → ok 且标注主诉求`, [r.status, r.primary_goal, r.label], ['ok', goal, label]);
+    has(`${label}主导有必深挖维度`, Array.isArray(r.deep_dive) && r.deep_dive.length >= 2);
+    has(`${label}主导有必核实客观事实`, Array.isArray(r.verify) && r.verify.length >= 3);
+    has(`${label}主导有默认方案倾向`, typeof r.scenario === 'string' && r.scenario.length > 0);
+    has(`${label}主导路由重点匹配`, [...r.deep_dive, ...r.verify].some(x => kw.test(x)));
+  }
+}
+
+{
+  // 回归保护：路由模块已落地，这些断言防止未来破坏
+  for (const g of [undefined, null, '', 'unknown']) {
+    const r = routeFor(g);
+    eq(`缺失/未知主诉求 ${String(g)} → not_defined`, r.status, 'not_defined');
+    has(`not_defined 提示先跑 intake (${String(g)})`, /intake/.test(r.hint ?? ''));
+  }
+  has('规则表不产生算术权重', Object.values(INTENT_ROUTES).every(r =>
+    !('weight' in r) && !('weights' in r) && !('score' in r)));
+  has('routeFor 两分支返回键集一致',
+    Object.keys(routeFor('education')).sort().join(',') === Object.keys(routeFor(undefined)).sort().join(','));
+  has('规则表不留一票否决字段（DQ 并入既有封顶规则）',
+    Object.values(INTENT_ROUTES).every(r => !('hard_dq' in r) && !('hard_dq_refs' in r)));
+
+  // 文档契约：本片红灯来源
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享评分口径含主诉求路由节', /### 主诉求路由/.test(shared));
+  for (const [key, r] of Object.entries(INTENT_ROUTES)) {
+    has(`路由文档表含 ${key} 行`, new RegExp(`\\|\\s*${key}\\s*\\|`).test(shared));
+    has(`路由文档表含 ${key} 的诉求标签`, shared.includes(r.label));
+    has(`路由文档表含 ${key} 的全部必深挖维度`, r.deep_dive.every(v => shared.includes(v)));
+    has(`路由文档表含 ${key} 的全部必核实事实`, r.verify.every(v => shared.includes(v)));
+    has(`路由文档表含 ${key} 的方案倾向`, shared.includes(r.scenario));
+  }
+  has('文档表主诉求行与规则表一一对应',
+    (shared.match(/^\|\s*(education|investment|owner_occupy)\s*\|/gm) ?? []).length === Object.keys(INTENT_ROUTES).length);
+  has('路由文档表声明不产生算术权重', /不产生算术权重/.test(shared));
+  has('路由文档表声明并入既有结构性封顶规则', /并入既有结构性封顶规则/.test(shared));
+  const evaluate = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  has('evaluate 含意图路由步骤', /Step 0\.5|意图路由/.test(evaluate));
+  has('evaluate 要求报告写路由依据', /路由依据/.test(evaluate));
+  has('evaluate 路由卡模板含四类依据',
+    ['主诉求', '必深挖维度', '必核实客观事实', '默认方案倾向'].every(k => evaluate.includes(k)));
+  has('evaluate 含未定义需求处理', /未定义需求/.test(evaluate));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含评估重心路由', glossary.includes('**评估重心路由**'));
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
