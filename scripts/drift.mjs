@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectReports, parseWatchlist } from './lib/data.mjs';
 import { parseProfile } from './lib/profile.mjs';
-import { buildObservations, detectDrift } from './lib/drift.mjs';
+import { buildObservations, detectDrift, shouldReconfirm, reconfirmPrompt } from './lib/drift.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -56,5 +56,13 @@ if (r.status === 'undetermined') {
     console.log(`  信号 ${i + 1} · ${s.kind}`);
     console.log(`    报告 ${s.report_nos.join('/')}：${s.detail}`);
   });
+  // 唯一插入点：仅 drift 判定才附再确认，aligned / undetermined 零插入
+  if (shouldReconfirm(r)) {
+    const prompt = reconfirmPrompt(r);
+    console.log('');
+    console.log(`再确认：${prompt.question}`);
+    prompt.options.forEach(o => console.log(`  - ${o.label}：${o.effect}`));
+    console.log(`  ⚠️ ${prompt.caveat}`);
+  }
 }
 console.log(`  ⚠️ ${r.caveat}`);

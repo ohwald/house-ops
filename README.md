@@ -220,7 +220,7 @@ node scripts/trend.mjs backtest               # calibration: anchor-direction vs
 
 ### Direction drift (`scripts/drift.mjs`)
 
-Read-only signals derived from existing evaluation reports and the watchlist: consecutive listings over the budget cap, or missing goal-specific verification fields. Outputs `drift` / `aligned` / `undetermined` with per-listing evidence. Never writes any profile, watchlist or state file; signals only decide whether to ask the user, never enter scoring.
+Read-only signals derived from existing evaluation reports and the watchlist: consecutive listings over the budget cap, or missing goal-specific verification fields. Outputs `drift` / `aligned` / `undetermined` with per-listing evidence. Never writes any profile, watchlist or state file; signals only decide whether to ask the user, never enter scoring. Only a `drift` verdict appends one neutral two-option re-confirmation prompt; `aligned` / `undetermined` insert nothing.
 
 ```bash
 node scripts/drift.mjs --min-streak 5   # threshold override declared in _custom.md
@@ -602,7 +602,7 @@ node scripts/trend.mjs backtest               # 校准回测：锚点方向 vs �
 
 ### 方向偏离信号（`scripts/drift.mjs`）
 
-只读派生自已有评估报告与关注清单的可复核信号：连续房源越过预算上限、主诉求必核实字段缺失等，输出「偏离 / 未偏离 / 无法判定」及逐条依据。零写入，不修改画像、清单或状态文件；信号只用于决定是否再向用户确认，绝不进评分。
+只读派生自已有评估报告与关注清单的可复核信号：连续房源越过预算上限、主诉求必核实字段缺失等，输出「偏离 / 未偏离 / 无法判定」及逐条依据。零写入，不修改画像、清单或状态文件；信号只用于决定是否再向用户确认，绝不进评分。仅当判定为「偏离」时才附上一句两个出口的中立再确认，其余路径零插入。
 
 ```bash
 node scripts/drift.mjs --min-streak 5   # 阈值由 _custom.md 声明后以参数传入
