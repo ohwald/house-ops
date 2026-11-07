@@ -192,9 +192,10 @@ These run without any agent involved:
 | `node scripts/reserve-report-num.mjs` | Atomically allocate the next report number (`001`, `002`, …) |
 | `node scripts/trend.mjs build` / `show <community>` | Weekly order-book marginal index per community from rescan history — honest `not_enough_data` during cold start |
 | `node scripts/rent.mjs --price <whole> --rent <whole/month>` | Price-to-rent ratio, static payback years, gross rental yield — listing-tier only, never a deal anchor |
+| `node scripts/drift.mjs` | Read-only direction-drift signals from reports & watchlist — never scores, never writes |
 | `npm run dashboard` | TUI console above |
 
-Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run trend`, `npm run rent`, `npm run insight`, `npm run dashboard`.
+Wrappers exist for all of them: `npm run doctor`, `npm run selftest`, `npm run stats`, `npm run scan`, `npm run trend`, `npm run rent`, `npm run drift`, `npm run insight`, `npm run dashboard`.
 
 ### Scanning & verification (`scripts/scan.mjs`)
 
@@ -215,6 +216,14 @@ Weekly community-level index from order-book marginal events: price changes, new
 node scripts/trend.mjs build                  # recompute weekly indices → data/trend/index-{date}.json (append-only)
 node scripts/trend.mjs show <community>       # readout card: 4w/12w cumulative, temperature, right-side weeks, events
 node scripts/trend.mjs backtest               # calibration: anchor-direction vs index-direction comparison table
+```
+
+### Direction drift (`scripts/drift.mjs`)
+
+Read-only signals derived from existing evaluation reports and the watchlist: consecutive listings over the budget cap, or missing goal-specific verification fields. Outputs `drift` / `aligned` / `undetermined` with per-listing evidence. Never writes any profile, watchlist or state file; signals only decide whether to ask the user, never enter scoring.
+
+```bash
+node scripts/drift.mjs --min-streak 5   # threshold override declared in _custom.md
 ```
 
 ### Rent yield (`scripts/rent.mjs`)
@@ -565,9 +574,10 @@ npm install && COLUMNS=90 node scripts/dashboard.mjs docs/examples/fixture
 | `node scripts/reserve-report-num.mjs` | 原子分配下一个报告编号（`001`、`002`…） |
 | `node scripts/trend.mjs build` / `show <小区>` | 周度盘口边际指数（来自复扫历史），冷启动期如实 `not_enough_data` |
 | `node scripts/rent.mjs --price <整额> --rent <整额/月>` | 租售比 / 静态回本年限 / 毛租金收益率，仅挂牌档、非成交锚点 |
+| `node scripts/drift.mjs` | 只读的方向偏离信号（来自报告与关注清单），不评分、零写入 |
 | `npm run dashboard` | 上面的 TUI 操作台 |
 
-以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `trend` / `rent` / `insight` / `dashboard`。
+以上均有 npm 包装：`npm run doctor` / `selftest` / `stats` / `scan` / `trend` / `rent` / `drift` / `insight` / `dashboard`。
 
 ### 扫描与验真（`scripts/scan.mjs`）
 
@@ -588,6 +598,14 @@ node scripts/scan.mjs verify <record.json> [--evidence ev.json]  # 真实性判�
 node scripts/trend.mjs build                  # 重算周度指数 → data/trend/index-{date}.json（追加式）
 node scripts/trend.mjs show <小区关键词>       # 读数卡：近4/12周累计、温度、右侧周数、事件数
 node scripts/trend.mjs backtest               # 校准回测：锚点方向 vs 指数方向比较表
+```
+
+### 方向偏离信号（`scripts/drift.mjs`）
+
+只读派生自已有评估报告与关注清单的可复核信号：连续房源越过预算上限、主诉求必核实字段缺失等，输出「偏离 / 未偏离 / 无法判定」及逐条依据。零写入，不修改画像、清单或状态文件；信号只用于决定是否再向用户确认，绝不进评分。
+
+```bash
+node scripts/drift.mjs --min-streak 5   # 阈值由 _custom.md 声明后以参数传入
 ```
 
 ### 租售比（`scripts/rent.mjs`）

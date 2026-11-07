@@ -21,6 +21,7 @@ import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decisi
 import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
 import { routeFor, INTENT_ROUTES } from './lib/intent-routing.mjs';
+import { detectDrift, DRIFT_THRESHOLDS, buildObservations, goalEvidenceMet } from './lib/drift.mjs';
 import { rentYield, RENT_TIER } from './lib/rent-yield.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
@@ -1289,6 +1290,91 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   has('evaluate 含未定义需求处理', /未定义需求/.test(evaluate));
   const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
   if (glossary) has('术语表含评估重心路由', glossary.includes('**评估重心路由**'));
+}
+
+// ---------- 方向偏离信号（issue #33）：detectDrift 纯函数 ----------
+
+{
+  const obs = (n, price, evidence) => ({
+    report_no: n, community: `小区${n}`, total_price_wan: price,
+    provenance: 'verified', goal_evidence: { investment: evidence },
+  });
+  const r = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [obs('011', 780, false), obs('012', 800, false), obs('013', 820, false)],
+  });
+  eq('连续越线+证据缺失 → drift', r.status, 'drift');
+  has('drift 输出逐条依据', r.signals.length >= 2
+    && r.signals.every(s => Array.isArray(s.report_nos) && s.report_nos.length === DRIFT_THRESHOLDS.min_streak));
+  has('依据含具体房源与字段值', r.signals.some(s => /780/.test(s.detail) && /820/.test(s.detail)));
+  has('输出带不进评分的免责口径', /不进评分/.test(r.caveat ?? ''));
+}
+
+{
+  const obs = (n, price, ev) => ({
+    report_no: n, total_price_wan: price, provenance: 'verified', goal_evidence: { investment: ev },
+  });
+  const three = [obs('011', 480, true), obs('012', 490, true), obs('013', 500, true)];
+  eq('主诉求缺失 → undetermined', detectDrift({ primary_goal: null, walk_away_wan: 600, observations: three }).status, 'undetermined');
+  eq('主诉求未知 → undetermined', detectDrift({ primary_goal: 'unknown', walk_away_wan: 600, observations: three }).status, 'undetermined');
+  eq('样本不足 → undetermined', detectDrift({ primary_goal: 'investment', observations: [obs('011', 480, true)] }).status, 'undetermined');
+  eq('无信号 → aligned', detectDrift({ primary_goal: 'investment', walk_away_wan: 600, observations: three }).status, 'aligned');
+  eq('阈值可覆盖（min_streak=2）', detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [obs('011', 780, false), obs('012', 800, false)], thresholds: { min_streak: 2 },
+  }).status, 'drift');
+  eq('goalEvidenceMet 字段缺失 → false', goalEvidenceMet('investment', { report_no: 'x' }), false);
+  eq('goalEvidenceMet 已覆盖 → true', goalEvidenceMet('investment', { rent_status: 'ok' }), true);
+  eq('goalEvidenceMet 未定义主诉求 → null', goalEvidenceMet('unknown', {}), null);
+
+  // 阈值防御：非法覆盖值回落缺省，不产生 slice(-NaN) 之类的静默错误
+  eq('NaN min_streak 回落缺省', detectDrift({ primary_goal: 'investment', observations: three, thresholds: { min_streak: NaN } }).min_streak, DRIFT_THRESHOLDS.min_streak);
+  eq('负数 min_streak 回落缺省', detectDrift({ primary_goal: 'investment', observations: three, thresholds: { min_streak: -1 } }).min_streak, DRIFT_THRESHOLDS.min_streak);
+  eq('非法 near_ratio 回落缺省', detectDrift({
+    primary_goal: 'investment', total_range_wan: [400, 600], observations: three,
+    thresholds: { budget_near_ratio: NaN },
+  }).status, 'aligned');
+
+  // 覆盖度缺口是数据完备性提示，不等于意图改变
+  const gap = detectDrift({ primary_goal: 'investment', walk_away_wan: 600, observations: [obs('011', 480, false), obs('012', 490, false), obs('013', 500, false)] });
+  has('覆盖度缺口信号明确不等于意图改变',
+    gap.signals.some(s => s.kind === 'goal_coverage_gap' && /不表示用户意图改变/.test(s.detail)));
+
+  // S2：只读收集器（信任共享层已过滤 void，消费端不重复实现——ADR-0002）
+  const reports = [
+    { report_no: '013', community: '丙', total_price_wan: 820, provenance: 'suspect' },
+    { report_no: '011', community: '甲', total_price_wan: 780, provenance: 'verified', rent_status: 'ok', policy_lock_risk: 'none', score_location: 4, score_property: 4 },
+  ];
+  const watchRows = [{ no: '011', authenticity: 'verified', note: '已看房；重点问学区' }];
+  const built = buildObservations(reports, watchRows);
+  eq('收集器不做第二次过滤，全量映射', built.length, 2);
+  eq('收集器按报告编号排序', built[0].report_no, '011');
+  has('观察记录含三类诉求的证据布尔',
+    built.every(o => ['education', 'investment', 'owner_occupy'].every(g => typeof o.goal_evidence[g] === 'boolean')));
+  has('观察记录保留总价与来源档位', built[0].total_price_wan === 780 && built[0].provenance === 'verified');
+  has('清单备注只读附带，不参与判定', built[0].note === '已看房；重点问学区' && built[1].note === '');
+}
+
+{
+  // 只读保证：CLI 与库源码都不得出现写操作（ADR-0001 不新建状态文件）
+  const driftSrc = await readFile(join(ROOT, 'scripts', 'drift.mjs'), 'utf8').catch(() => '');
+  has('drift CLI 存在且零写入',
+    driftSrc.length > 0 && !/writeFile|appendFile|mkdir|createWriteStream|rename\(|rm\(/.test(driftSrc));
+  const libSrc = await readFile(join(ROOT, 'scripts', 'lib', 'drift.mjs'), 'utf8').catch(() => '');
+  has('漂移库零写入', !/writeFile|appendFile|mkdir|createWriteStream/.test(libSrc));
+
+  // 文档/注册契约
+  const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8').catch(() => '{}'));
+  has('package.json 注册 drift 包装', pkg.scripts?.drift === 'node scripts/drift.mjs');
+  // README.md 是仓库根文件，不在分发副本里；缺文件时跳过，仓库形态仍断言
+  const readme = await readFile(join(ROOT, 'README.md'), 'utf8').catch(() => '');
+  if (readme) has('README 登记 drift 命令', readme.includes('scripts/drift.mjs'));
+  const doctor = await readFile(join(ROOT, 'scripts', 'doctor.mjs'), 'utf8').catch(() => '');
+  has('doctor sysFiles 登记 drift 模块与 CLI', doctor.includes('lib/drift.mjs') && doctor.includes('scripts/drift.mjs'));
+  const custom = await readFile(join(ROOT, 'modes', '_custom.template.md'), 'utf8').catch(() => '');
+  has('家规模板说明阈值覆盖方式', custom.includes('min_streak'));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含方向偏离信号', glossary.includes('**方向偏离信号**'));
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
