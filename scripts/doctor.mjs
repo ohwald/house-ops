@@ -52,7 +52,7 @@ const sysFiles = [
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
   'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/lib/detect.mjs',
   'scripts/lib/official-sources.mjs', 'scripts/lib/rent-yield.mjs', 'scripts/rent.mjs',
-  'scripts/lib/intent-routing.mjs', 'scripts/dashboard.mjs',
+  'scripts/lib/intent-routing.mjs', 'scripts/lib/drift.mjs', 'scripts/drift.mjs', 'scripts/dashboard.mjs',
   'scripts/map.mjs', 'scripts/trend.mjs', 'scripts/lib/trend.mjs',
   'scripts/rescan.mjs', 'scripts/lib/rescan.mjs',
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
