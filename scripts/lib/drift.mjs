@@ -131,3 +131,27 @@ export function detectDrift({
     caveat: CAVEAT,
   };
 }
+
+// ---------- 方向偏离再确认（issue #34） ----------
+
+// 唯一触发条件：判定为 drift 且确有可复核信号。其余状态一律零插入。
+export function shouldReconfirm(result) {
+  return !!result && result.status === 'drift'
+    && Array.isArray(result.signals) && result.signals.length > 0;
+}
+
+// 话术只在触发时生成；非 drift 返回 null，保证「其余路径零插入」。
+// 两个出口、措辞中立、不预设用户已改变；未明确确认前不写任何用户层文件。
+export function reconfirmPrompt(result) {
+  if (!shouldReconfirm(result)) return null;
+  return {
+    trigger: 'drift',
+    question: '我注意到最近几套房源和画像里记的主诉求不太一致，是重心变了吗？还是这批只是随手看看？',
+    options: [
+      { key: 'changed', label: '重心变了', effect: '经用户明确确认后，走 intake 的「更新哪些部分」轮次改写画像；确认前不写任何文件' },
+      { key: 'just_looking', label: '只是随手看看', effect: '保持原画像继续当前工作，不写任何用户层文件' },
+    ],
+    caveat: '未明确确认前不写任何用户层文件；不替用户改写需求、不单向引导',
+    signal_kinds: result.signals.map(s => s.kind),
+  };
+}

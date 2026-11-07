@@ -21,7 +21,7 @@ import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decisi
 import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
 import { routeFor, INTENT_ROUTES } from './lib/intent-routing.mjs';
-import { detectDrift, DRIFT_THRESHOLDS, buildObservations, goalEvidenceMet } from './lib/drift.mjs';
+import { detectDrift, DRIFT_THRESHOLDS, buildObservations, goalEvidenceMet, shouldReconfirm, reconfirmPrompt } from './lib/drift.mjs';
 import { rentYield, RENT_TIER } from './lib/rent-yield.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
@@ -1359,7 +1359,7 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   // 只读保证：CLI 与库源码都不得出现写操作（ADR-0001 不新建状态文件）
   const driftSrc = await readFile(join(ROOT, 'scripts', 'drift.mjs'), 'utf8').catch(() => '');
   has('drift CLI 存在且零写入',
-    driftSrc.length > 0 && !/writeFile|appendFile|mkdir|createWriteStream|rename\(|rm\(/.test(driftSrc));
+    driftSrc.length > 0 && !/\b(writeFile|appendFile|mkdir|createWriteStream|rename|rm)\s*\(/.test(driftSrc));
   const libSrc = await readFile(join(ROOT, 'scripts', 'lib', 'drift.mjs'), 'utf8').catch(() => '');
   has('漂移库零写入', !/writeFile|appendFile|mkdir|createWriteStream/.test(libSrc));
 
@@ -1375,6 +1375,74 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
   has('家规模板说明阈值覆盖方式', custom.includes('min_streak'));
   const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
   if (glossary) has('术语表含方向偏离信号', glossary.includes('**方向偏离信号**'));
+}
+
+// ---------- 方向偏离再确认（issue #34）：触发与话术 ----------
+
+{
+  const ob = (n, price, ev) => ({ report_no: n, total_price_wan: price, goal_evidence: { investment: ev } });
+  const drift = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [ob('011', 780, false), ob('012', 800, false), ob('013', 820, false)],
+  });
+  eq('drift 才触发再确认', shouldReconfirm(drift), true);
+  const aligned = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [ob('011', 480, true), ob('012', 490, true), ob('013', 500, true)],
+  });
+  eq('aligned 零插入', shouldReconfirm(aligned), false);
+  eq('undetermined 零插入', shouldReconfirm(detectDrift({ primary_goal: null, observations: [] })), false);
+  eq('空结果零插入', shouldReconfirm(null), false);
+  const prompt = reconfirmPrompt(drift);
+  has('话术含两个出口', Array.isArray(prompt?.options) && prompt.options.length === 2);
+  has('措辞中立不预设「你一定变了」',
+    /随手看看/.test(prompt.question) && !/你一定|肯定变|必须改/.test(prompt.question));
+  has('明确未确认不写用户层文件', /未.*确认.*不写/.test(prompt.caveat));
+}
+
+{
+  // 回归保护
+  const drift2 = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [
+      { report_no: '011', total_price_wan: 780, goal_evidence: { investment: false } },
+      { report_no: '012', total_price_wan: 800, goal_evidence: { investment: false } },
+      { report_no: '013', total_price_wan: 820, goal_evidence: { investment: false } },
+    ],
+  });
+  const prompt = reconfirmPrompt(drift2);
+  eq('非 drift 的话术返回 null', reconfirmPrompt(detectDrift({ primary_goal: null, observations: [] })), null);
+  has('两个出口都带 key/label/effect', prompt.options.every(o => o.key && o.label && o.effect));
+  has('话术携带信号依据', Array.isArray(prompt.signal_kinds) && prompt.signal_kinds.length >= 1);
+
+  // CLI 接线（本片红灯来源）
+  const cliSrc = await readFile(join(ROOT, 'scripts', 'drift.mjs'), 'utf8').catch(() => '');
+  has('CLI 仅在 drift 分支输出再确认话术',
+    cliSrc.includes('reconfirmPrompt') && cliSrc.includes('shouldReconfirm')
+    && cliSrc.lastIndexOf('reconfirmPrompt') > cliSrc.lastIndexOf('} else {'));
+  has('CLI 仍零写入', !/writeFile|appendFile|mkdir|createWriteStream/.test(cliSrc));
+
+  // 文档契约
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享规则含方向偏离再确认节', /### 方向偏离再确认/.test(shared));
+  has('规则写明唯一触发条件', /唯一触发条件/.test(shared) && /仅当判定为/.test(shared));
+  has('规则写明禁止插入的时机', /新会话首次贴房源/.test(shared) && /带看后/.test(shared) && /长间隔/.test(shared));
+  has('规则写明确认后才按 intake 更新', /intake/.test(shared) && /确认后/.test(shared));
+  has('文档话术与 reconfirmPrompt 逐字一致（防漂移）',
+    shared.includes(prompt.question)
+    && prompt.options.every(o => shared.includes(o.label) && shared.includes(o.effect)));
+  has('规则列出适用模式', /适用模式/.test(shared) && shared.includes('evaluate'));
+  const evaluateDoc = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  has('evaluate Post-evaluation 显式接线', /方向偏离再确认/.test(evaluateDoc) && /Post-evaluation/.test(evaluateDoc));
+  has('全局 NEVER 含零插入纪律', /NEVER[\s\S]*零插入/.test(shared));
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8').catch(() => '');
+  has('AGENTS 中立原则含再确认边界', agents.includes('再确认'));
+  const intake = await readFile(join(ROOT, 'modes', 'intake.md'), 'utf8').catch(() => '');
+  has('intake 引用再确认后更新轮次', intake.includes('再确认'));
+  const watchlist = await readFile(join(ROOT, 'modes', 'watchlist.md'), 'utf8').catch(() => '');
+  has('既有实采时效提醒保持原样（未被叠加再确认）', /时效提醒/.test(watchlist) && !/再确认/.test(watchlist));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含再确认', glossary.includes('**再确认**'));
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
