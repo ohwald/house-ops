@@ -70,6 +70,15 @@ intent:
   purpose: ""                  # own_stay(自住) | investment(投资) | mixed
   timeline: ""                 # 计划购入/入住时间，如：1 年内
   holding_horizon_years: null  # 预计持有年限（投资/流通性判断用）
+  primary_goal: ""             # 主诉求：education(教育) | investment(投资) | owner_occupy(自住)
+  secondary_goals: ""          # 次诉求，逗号分隔，如 investment, owner_occupy
+  lifecycle_stage: ""          # first_home(首套) | upgrade(置换) | investment_only(纯投资)
+  budget_posture: ""           # unconstrained(不差钱) | balanced(平衡) | constrained(预算受限)
+  goal_confidence: ""          # firm(已明确) | exploring(摇摆/未定)；未采集留空，不预置值
+
+rental:                          # 租金/收益目标（可选；缺省不阻断评估）
+  target_monthly_rent: null      # 挂牌月租参考值（本币整额/月），用于租售比推演
+  target_gross_yield_pct: null   # 毛租金收益率目标（%），供收益率对照
 
 preferences:
   layout: ""                   # 户型，如：三居两卫（孩子+老人同住通常 ≥3 居）

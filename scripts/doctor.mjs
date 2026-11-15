@@ -8,6 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SCAN_SCHEMA, PAGE_TYPES, RELIABILITY, SCAN_STATUS } from '../scrapers/_fields.mjs';
 import { TREND_CONSTANTS } from './lib/trend.mjs';
+import { INTENT_ROUTES } from './lib/intent-routing.mjs';
 import { checkGranularity } from './lib/official-sources.mjs';
 
 const root = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +51,8 @@ const sysFiles = [
   'package.json',
   'scripts/reserve-report-num.mjs', 'scripts/doctor.mjs', 'scripts/stats.mjs',
   'scripts/scan.mjs', 'scripts/lib/data.mjs', 'scripts/lib/detect.mjs',
-  'scripts/lib/official-sources.mjs', 'scripts/dashboard.mjs',
+  'scripts/lib/official-sources.mjs', 'scripts/lib/rent-yield.mjs', 'scripts/rent.mjs',
+  'scripts/lib/intent-routing.mjs', 'scripts/lib/drift.mjs', 'scripts/drift.mjs', 'scripts/dashboard.mjs',
   'scripts/map.mjs', 'scripts/trend.mjs', 'scripts/lib/trend.mjs',
   'scripts/rescan.mjs', 'scripts/lib/rescan.mjs',
   'scrapers/_registry.mjs', 'scrapers/_fields.mjs', 'scrapers/ADDING_A_PLATFORM.md',
@@ -182,6 +184,18 @@ try {
       : `${g.files.join(', ')} 共 ${g.checked} 条粒度取值合规`);
 } catch (err) {
   check('fail', '政务源 granularity 枚举自一致', `读取失败: ${err.message}`);
+}
+
+// 6d. 主诉求路由一致性：_shared.md（SoT 文档表）↔ lib/intent-routing.mjs 规则表
+try {
+  const sharedDoc = await readFile(join(root, 'modes', '_shared.md'), 'utf8');
+  const missing = Object.entries(INTENT_ROUTES)
+    .filter(([k, r]) => !new RegExp(`\\|\\s*${k}\\s*\\|`).test(sharedDoc) || !sharedDoc.includes(r.label))
+    .map(([k]) => k);
+  check(missing.length ? 'fail' : 'pass', '主诉求路由一致性（_shared.md ↔ lib/intent-routing.mjs）',
+    missing.length ? `文档表缺少/漂移: ${missing.join(', ')}` : `${Object.keys(INTENT_ROUTES).length} 类主诉求与文档表一致`);
+} catch (err) {
+  check('fail', '主诉求路由一致性', `读取失败: ${err.message}`);
 }
 
 // 7. 市场覆盖：登记表与政策表必须成对，且画像里的 market.code 要落在已登记市场内

@@ -18,7 +18,7 @@
 
 | 路径 | 内容 |
 |---|---|
-| `config/profile.yml` | 购房需求画像（`market:` 市场与单位口径 + 预算/城市/资格/偏好/权重），从 `profile.example.yml` 生成 |
+| `config/profile.yml` | 购房需求画像（`market:` 市场与单位口径 + 预算/城市/资格/意图分型/偏好/权重），从 `profile.example.yml` 生成 |
 | `modes/_profile.md` | 画像的语义补充（生活方式、一票否决规则、权重取舍理由） |
 | `modes/_custom.md` | 家规：用户对流程/评分规则的个性化覆盖 |
 | `data/` | 运行时状态：`watchlist.md`（关注清单）、`notes/`（带看记录等） |
@@ -35,7 +35,7 @@
 | `modes/_shared.md` | 系统共享上下文：评分体系、配套分级参考、软素质信号、全局规则 |
 | `modes/*.md`（非 `_` 前缀） | 十三个工作模式 |
 | `modes/_profile.template.md`、`modes/_custom.template.md`、`modes/_brief.template.md` | 用户层种子模板 |
-| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段与 `market:` 多市场段） |
+| `config/profile.example.yml` | 画像模板（含 `family:` 家庭结构段、`intent:` 意图分型段与 `market:` 多市场段） |
 | `templates/` | 政策数据表 `policy-notes.{cn,eu,apac}.yml`、合同走查 `contract-checklist.cn.yml`、政务数据源登记 `official-sources.{cn,eu,apac}.yml` |
 | `scrapers/*.mjs` | 房源平台扫描模板（career-ops providers 模式：一平台一模块 + `_registry` 文件系统注册表；贝壳/链家/安居客/我爱我家/房天下，零依赖） |
 | `scripts/*.mjs` | 确定性操作：报告编号原子分配、环境自检、Machine Summary 统计、平台识别/扫描归一化/挂牌-成交交叉验证（零依赖，Node ≥18） |
@@ -96,7 +96,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `modes/_shared.md` | 评分体系六维定义、配套分级参考、小区软素质信号、分档解读、全局 NEVER/ALWAYS、SoT 表——评估类模式必读 |
+| `modes/_shared.md` | 评分体系六维定义、主诉求路由表、配套分级参考、小区软素质信号、分档解读、全局 NEVER/ALWAYS、SoT 表——评估类模式必读 |
 | `modes/intake.md` | 多轮对话采集购房需求（市场与单位口径→家庭结构→衍生需求翻译），生成 `config/profile.yml` + `modes/_profile.md` + `modes/_brief.md` |
 | `modes/evaluate.md` | 单房源六维评级，产出报告并登记 watchlist；Machine Summary schema 的 SoT |
 | `modes/triage.md` | 60 秒快速速筛（`_brief.md` 三问），不落报告 |
@@ -164,6 +164,7 @@
 
 - **AI 只评估、建议、推演，绝不代替用户行动**：不发送任何消息给中介/房东、不承诺价格、不提交任何表单、不涉及任何款项操作。所有沟通内容仅以草稿或沙盘方案形式交给用户。
 - **中立推演，拒绝单向激进引导**：不替用户做武断决断，不急躁催促看房或单向推销某种选择；而是**尽可能提供多类方案以供对比（Scenario Trade-offs）**。对每套房源与抉择点，列清“如果选它能获得什么、必须承受什么代价”，给出积极进取、稳健观望、替代置换等多路径利弊矩阵，由用户掌握绝对决策权。
+- **方向偏离再确认只在信号越阈值时轻问一句**：给「重心变了 / 只是随手看看」两个出口，用户未明确确认前不改写任何用户层文件；其余路径零插入，既有实采时效提醒保持原样。
 - **决策三大深度支柱（全面贯穿评分与地图）**：
   1. **当地政策深度解读**：购房资格、首套/二套信贷、公积金新政、各项交易税费精算、落户与学区锁定规则（五年一户/六年一户、入学顺位）。
   2. **历史成交与抗跌性走势**：挂牌-成交真实折价弹性、历史周期峰值回调与抗跌性、小区换手率与流动性陷阱识别。

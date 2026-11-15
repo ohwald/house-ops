@@ -20,6 +20,9 @@ import { authenticityFromNote, effectiveProvenance, parseMachineSummary, loadTre
 import { decide, isUserExcluded, riskLabel, conclusionLabel } from './lib/decision.mjs';
 import { TREND_TEMP_LABEL } from './lib/trend.mjs';
 import { parseProfile, updateProfileFields, PROFILE_FIELDS } from './lib/profile.mjs';
+import { routeFor, INTENT_ROUTES } from './lib/intent-routing.mjs';
+import { detectDrift, DRIFT_THRESHOLDS, buildObservations, goalEvidenceMet, shouldReconfirm, reconfirmPrompt } from './lib/drift.mjs';
+import { rentYield, RENT_TIER } from './lib/rent-yield.mjs';
 import { renderMapHtml } from './lib/map-html.mjs';
 import { analyze } from './analysis.mjs';
 import { solarElevation, noiseLevelAt } from './insight.mjs';
@@ -539,7 +542,9 @@ const ALL_KEYS_YAML = 'market:\n  code: x\n  country: x\n  city_local: x\n  curr
   + '  tenure_preference: x\n  min_lease_years: 1\n'
   + 'buyer:\n  city: x\n  work_location: x\n  work_location_coords: [121.4, 31.2]\n  commute_max_minutes: 60\n'
   + 'budget:\n  total_range_wan: [1, 2]\n  walk_away_wan: 3\n  payment: x\n  loan_type: x\n'
+  + 'intent:\n  primary_goal: x\n  secondary_goals: x\n  lifecycle_stage: x\n  budget_posture: x\n  goal_confidence: x\n'
   + 'preferences:\n  layout: x\n  size_range_sqm: [1, 2]\n  building_age_max: 3\n  elevator_required: true\n'
+  + 'rental:\n  target_monthly_rent: 1\n  target_gross_yield_pct: 2\n'
   + 'thresholds:\n  deep_dive_min: 4\n  give_up_below: 3\n';
 
 const profileYaml = `buyer:
@@ -1105,6 +1110,339 @@ eq('liftMobileCity（非移动端原样）', liftMobileCity('sh', 'ershoufang/1.
       has(`openExternal 拦下恶意/越界目标：${target.slice(0, 26)}`, calls.length === 0 && errs.length === 1);
     }
   }
+}
+
+// ---------- 租售比最小闭环（issue #25）：rentYield 纯函数 ----------
+
+{
+  const r = rentYield({ total_price: 4800000, monthly_rent: 8000, as_of: '2026-11-06' });
+  eq('租售比 1:N（总价/月租）', r.price_to_rent, 600);
+  eq('静态回本年限（总价/年租）', r.payback_years, 50);
+  eq('毛租金收益率（年租/总价）', r.gross_yield_pct, 2);
+  eq('状态 ok', r.status, 'ok');
+}
+
+{
+  const cases = [
+    ['缺月租', { total_price: 4800000 }],
+    ['月租为 0', { total_price: 4800000, monthly_rent: 0 }],
+    ['月租为负', { total_price: 4800000, monthly_rent: -8000 }],
+    ['总价缺失', { monthly_rent: 8000 }],
+    ['总价为 0', { total_price: 0, monthly_rent: 8000 }],
+    ['非数字字符串', { total_price: '480万', monthly_rent: 8000 }],
+  ];
+  for (const [name, input] of cases) {
+    const r = rentYield(input);
+    eq(`${name} → not_evaluated`, r.status, 'not_evaluated');
+    has(`${name} 不产生任何租售比数值`,
+      r.price_to_rent === null && r.payback_years === null && r.gross_yield_pct === null);
+    has(`${name} 给出不估算的理由`, typeof r.reason === 'string' && r.reason.length > 0);
+  }
+}
+
+{
+  const r = rentYield({ total_price: 4800000, monthly_rent: 8000, as_of: '2026-11-06' });
+  eq('档位恒为挂牌数据', [r.tier, RENT_TIER], [RENT_TIER, '挂牌数据']);
+  eq('绝不标成成交锚点', r.is_deal_anchor, false);
+  has('带挂牌口径/非成交锚点说明', /挂牌口径/.test(r.caveat ?? '') && /非成交锚点/.test(r.caveat ?? ''));
+  const over = rentYield({ total_price: 4800000, monthly_rent: 8000, reliability: '成交数据' });
+  eq('传入成交档也被钳制为挂牌档', over.tier, RENT_TIER);
+  eq('低档位（中介口述）→ not_evaluated', rentYield({ total_price: 4800000, monthly_rent: 8000, reliability: '中介口述' }).status, 'not_evaluated');
+  eq('样本不足 → not_evaluated', rentYield({ total_price: 4800000, monthly_rent: 8000, n_samples: 0 }).status, 'not_evaluated');
+}
+
+// ---------- 租售比最小闭环（issue #25）：画像字段契约 ----------
+
+{
+  const fields = PROFILE_FIELDS.filter(f => f.section === 'rental').map(f => f.key).sort();
+  eq('画像契约含 rental 两字段', fields, ['target_gross_yield_pct', 'target_monthly_rent']);
+  const p = parseProfile('rental:\n  target_monthly_rent: 8000\n  target_gross_yield_pct: 2.5\n');
+  eq('画像可读入租金/收益目标', [p.rental?.target_monthly_rent, p.rental?.target_gross_yield_pct], [8000, 2.5]);
+  const empty = parseProfile('rental:\n  target_monthly_rent: null\n  target_gross_yield_pct: null\n');
+  has('缺省 null 不阻断评估', empty.rental?.target_monthly_rent === null && empty.rental?.target_gross_yield_pct === null);
+  const upd = updateProfileFields('rental:\n  target_monthly_rent: null\n  target_gross_yield_pct: null\n',
+    { rental: { target_monthly_rent: 9000, target_gross_yield_pct: 3 } });
+  eq('画像字段可安全回写且无 unknown', [upd.applied.includes('rental.target_monthly_rent'), upd.unknown.length], [true, 0]);
+}
+
+// ---------- 租售比最小闭环（issue #25）：Machine Summary 兼容 + 文档契约 ----------
+
+{
+  const withRent = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "099"\nscore_global: 4.1\n'
+    + 'rent_monthly: 8000\nrent_price_to_rent: 600\nrent_payback_years: 50\nrent_gross_yield_pct: 2\n'
+    + 'rent_tier: "挂牌数据"\nrent_as_of: "2026-11-06"\nrent_status: ok\nunverified_items: []\n```');
+  eq('含 rent_* 字段能解析', [withRent.rent_monthly, withRent.rent_price_to_rent, withRent.rent_payback_years, withRent.rent_gross_yield_pct], [8000, 600, 50, 2]);
+  eq('档位/as_of/status 解析', [withRent.rent_tier, withRent.rent_as_of, withRent.rent_status], ['挂牌数据', '2026-11-06', 'ok']);
+  const legacy = parseMachineSummary('## Machine Summary\n```yaml\nreport_no: "001"\nscore_global: 3.9\n```');
+  eq('旧报告无 rent_* 键 → 合法（可选兼容）', 'rent_monthly' in legacy, false);
+  eq('旧报告既有字段不受影响', legacy.score_global, 3.9);
+}
+
+{
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享评分口径写明租金档位上限', /租金最高只到「挂牌数据」档/.test(shared));
+  has('共享评分口径写明与成交锚点隔离', /不得进入成交锚点/.test(shared));
+  const evaluate = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  for (const k of ['rent_monthly', 'rent_price_to_rent', 'rent_payback_years', 'rent_gross_yield_pct', 'rent_tier', 'rent_as_of', 'rent_status']) {
+    has(`evaluate.md schema 含 ${k}`, evaluate.includes(k));
+  }
+  const example = await readFile(join(ROOT, 'config', 'profile.example.yml'), 'utf8').catch(() => '');
+  has('模板含 rental 段', /^rental:/m.test(example));
+  has('模板含两个画像键', example.includes('target_monthly_rent') && example.includes('target_gross_yield_pct'));
+}
+
+// ---------- 意图分型（issue #31）：画像字段契约 ----------
+
+{
+  const fields = PROFILE_FIELDS.filter(f => f.section === 'intent').map(f => f.key).sort();
+  eq('画像契约含 intent 五字段', fields,
+    ['primary_goal', 'secondary_goals', 'lifecycle_stage', 'budget_posture', 'goal_confidence'].sort());
+  const p = parseProfile('intent:\n  primary_goal: education\n  secondary_goals: investment, owner_occupy\n'
+    + '  lifecycle_stage: upgrade\n  budget_posture: constrained\n  goal_confidence: exploring\n');
+  eq('画像可读入五类意图信息',
+    [p.intent?.primary_goal, p.intent?.secondary_goals, p.intent?.lifecycle_stage, p.intent?.budget_posture, p.intent?.goal_confidence],
+    ['education', 'investment, owner_occupy', 'upgrade', 'constrained', 'exploring']);
+}
+
+{
+  // 回归保护：字段契约已在上一片落地，这些断言防止未来破坏
+  const legacy = parseProfile('intent:\n  purpose: own_stay\n');
+  has('旧画像缺新字段不阻断且不臆造',
+    legacy.intent?.primary_goal === null && legacy.intent?.secondary_goals === null
+    && legacy.intent?.lifecycle_stage === null && legacy.intent?.budget_posture === null
+    && legacy.intent?.goal_confidence === null);
+  const upd = updateProfileFields(
+    'intent:\n  primary_goal: ""\n  secondary_goals: ""\n  lifecycle_stage: ""\n  budget_posture: ""\n  goal_confidence: ""\n',
+    { intent: { primary_goal: 'education', goal_confidence: 'firm' } });
+  eq('意图字段可安全回写且无 unknown', [upd.applied.length, upd.unknown.length], [2, 0]);
+  eq('回写后 firm 生效', parseProfile(upd.text).intent?.goal_confidence, 'firm');
+
+  // 文档/语义契约：本片红灯来源
+  const example = await readFile(join(ROOT, 'config', 'profile.example.yml'), 'utf8').catch(() => '');
+  for (const k of ['primary_goal', 'secondary_goals', 'lifecycle_stage', 'budget_posture', 'goal_confidence']) {
+    has(`模板含 ${k}`, example.includes(k));
+  }
+  const intake = await readFile(join(ROOT, 'modes', 'intake.md'), 'utf8').catch(() => '');
+  has('intake 有意图分型轮', /意图分型轮/.test(intake));
+  has('intake 写明跳过/未定记 exploring', /exploring/.test(intake));
+  const semantic = await readFile(join(ROOT, 'modes', '_profile.template.md'), 'utf8').catch(() => '');
+  has('语义模板含意图分型节', /## 意图分型/.test(semantic));
+  has('语义模板明确非交易状态（ADR-0001）', /ADR-0001/.test(semantic));
+  const brief = await readFile(join(ROOT, 'modes', '_brief.template.md'), 'utf8').catch(() => '');
+  has('速筛模板含主诉求与次诉求', brief.includes('主诉求') && brief.includes('次诉求'));
+  // GLOSSARY.md 是仓库根文件，不在分发副本里；缺文件时跳过，仓库形态仍断言
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) {
+    has('术语表含主诉求与意图确定度', glossary.includes('**主诉求**') && glossary.includes('**意图确定度**'));
+  }
+}
+
+// ---------- 主诉求路由（issue #32）：routeFor 纯函数 ----------
+
+{
+  for (const [goal, label, kw] of [
+    ['education', '教育', /学区|施教区/],
+    ['investment', '投资', /成交锚点|租售比/],
+    ['owner_occupy', '自住', /配套|户型/],
+  ]) {
+    const r = routeFor(goal);
+    eq(`${label}主导 → ok 且标注主诉求`, [r.status, r.primary_goal, r.label], ['ok', goal, label]);
+    has(`${label}主导有必深挖维度`, Array.isArray(r.deep_dive) && r.deep_dive.length >= 2);
+    has(`${label}主导有必核实客观事实`, Array.isArray(r.verify) && r.verify.length >= 3);
+    has(`${label}主导有默认方案倾向`, typeof r.scenario === 'string' && r.scenario.length > 0);
+    has(`${label}主导路由重点匹配`, [...r.deep_dive, ...r.verify].some(x => kw.test(x)));
+  }
+}
+
+{
+  // 回归保护：路由模块已落地，这些断言防止未来破坏
+  for (const g of [undefined, null, '', 'unknown']) {
+    const r = routeFor(g);
+    eq(`缺失/未知主诉求 ${String(g)} → not_defined`, r.status, 'not_defined');
+    has(`not_defined 提示先跑 intake (${String(g)})`, /intake/.test(r.hint ?? ''));
+  }
+  has('规则表不产生算术权重', Object.values(INTENT_ROUTES).every(r =>
+    !('weight' in r) && !('weights' in r) && !('score' in r)));
+  has('routeFor 两分支返回键集一致',
+    Object.keys(routeFor('education')).sort().join(',') === Object.keys(routeFor(undefined)).sort().join(','));
+  has('规则表不留一票否决字段（DQ 并入既有封顶规则）',
+    Object.values(INTENT_ROUTES).every(r => !('hard_dq' in r) && !('hard_dq_refs' in r)));
+
+  // 文档契约：本片红灯来源
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享评分口径含主诉求路由节', /### 主诉求路由/.test(shared));
+  for (const [key, r] of Object.entries(INTENT_ROUTES)) {
+    has(`路由文档表含 ${key} 行`, new RegExp(`\\|\\s*${key}\\s*\\|`).test(shared));
+    has(`路由文档表含 ${key} 的诉求标签`, shared.includes(r.label));
+    has(`路由文档表含 ${key} 的全部必深挖维度`, r.deep_dive.every(v => shared.includes(v)));
+    has(`路由文档表含 ${key} 的全部必核实事实`, r.verify.every(v => shared.includes(v)));
+    has(`路由文档表含 ${key} 的方案倾向`, shared.includes(r.scenario));
+  }
+  has('文档表主诉求行与规则表一一对应',
+    (shared.match(/^\|\s*(education|investment|owner_occupy)\s*\|/gm) ?? []).length === Object.keys(INTENT_ROUTES).length);
+  has('路由文档表声明不产生算术权重', /不产生算术权重/.test(shared));
+  has('路由文档表声明并入既有结构性封顶规则', /并入既有结构性封顶规则/.test(shared));
+  const evaluate = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  has('evaluate 含意图路由步骤', /Step 0\.5|意图路由/.test(evaluate));
+  has('evaluate 要求报告写路由依据', /路由依据/.test(evaluate));
+  has('evaluate 路由卡模板含四类依据',
+    ['主诉求', '必深挖维度', '必核实客观事实', '默认方案倾向'].every(k => evaluate.includes(k)));
+  has('evaluate 含未定义需求处理', /未定义需求/.test(evaluate));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含评估重心路由', glossary.includes('**评估重心路由**'));
+}
+
+// ---------- 方向偏离信号（issue #33）：detectDrift 纯函数 ----------
+
+{
+  const obs = (n, price, evidence) => ({
+    report_no: n, community: `小区${n}`, total_price_wan: price,
+    provenance: 'verified', goal_evidence: { investment: evidence },
+  });
+  const r = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [obs('011', 780, false), obs('012', 800, false), obs('013', 820, false)],
+  });
+  eq('连续越线+证据缺失 → drift', r.status, 'drift');
+  has('drift 输出逐条依据', r.signals.length >= 2
+    && r.signals.every(s => Array.isArray(s.report_nos) && s.report_nos.length === DRIFT_THRESHOLDS.min_streak));
+  has('依据含具体房源与字段值', r.signals.some(s => /780/.test(s.detail) && /820/.test(s.detail)));
+  has('输出带不进评分的免责口径', /不进评分/.test(r.caveat ?? ''));
+}
+
+{
+  const obs = (n, price, ev) => ({
+    report_no: n, total_price_wan: price, provenance: 'verified', goal_evidence: { investment: ev },
+  });
+  const three = [obs('011', 480, true), obs('012', 490, true), obs('013', 500, true)];
+  eq('主诉求缺失 → undetermined', detectDrift({ primary_goal: null, walk_away_wan: 600, observations: three }).status, 'undetermined');
+  eq('主诉求未知 → undetermined', detectDrift({ primary_goal: 'unknown', walk_away_wan: 600, observations: three }).status, 'undetermined');
+  eq('样本不足 → undetermined', detectDrift({ primary_goal: 'investment', observations: [obs('011', 480, true)] }).status, 'undetermined');
+  eq('无信号 → aligned', detectDrift({ primary_goal: 'investment', walk_away_wan: 600, observations: three }).status, 'aligned');
+  eq('阈值可覆盖（min_streak=2）', detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [obs('011', 780, false), obs('012', 800, false)], thresholds: { min_streak: 2 },
+  }).status, 'drift');
+  eq('goalEvidenceMet 字段缺失 → false', goalEvidenceMet('investment', { report_no: 'x' }), false);
+  eq('goalEvidenceMet 已覆盖 → true', goalEvidenceMet('investment', { rent_status: 'ok' }), true);
+  eq('goalEvidenceMet 未定义主诉求 → null', goalEvidenceMet('unknown', {}), null);
+
+  // 阈值防御：非法覆盖值回落缺省，不产生 slice(-NaN) 之类的静默错误
+  eq('NaN min_streak 回落缺省', detectDrift({ primary_goal: 'investment', observations: three, thresholds: { min_streak: NaN } }).min_streak, DRIFT_THRESHOLDS.min_streak);
+  eq('负数 min_streak 回落缺省', detectDrift({ primary_goal: 'investment', observations: three, thresholds: { min_streak: -1 } }).min_streak, DRIFT_THRESHOLDS.min_streak);
+  eq('非法 near_ratio 回落缺省', detectDrift({
+    primary_goal: 'investment', total_range_wan: [400, 600], observations: three,
+    thresholds: { budget_near_ratio: NaN },
+  }).status, 'aligned');
+
+  // 覆盖度缺口是数据完备性提示，不等于意图改变
+  const gap = detectDrift({ primary_goal: 'investment', walk_away_wan: 600, observations: [obs('011', 480, false), obs('012', 490, false), obs('013', 500, false)] });
+  has('覆盖度缺口信号明确不等于意图改变',
+    gap.signals.some(s => s.kind === 'goal_coverage_gap' && /不表示用户意图改变/.test(s.detail)));
+
+  // S2：只读收集器（信任共享层已过滤 void，消费端不重复实现——ADR-0002）
+  const reports = [
+    { report_no: '013', community: '丙', total_price_wan: 820, provenance: 'suspect' },
+    { report_no: '011', community: '甲', total_price_wan: 780, provenance: 'verified', rent_status: 'ok', policy_lock_risk: 'none', score_location: 4, score_property: 4 },
+  ];
+  const watchRows = [{ no: '011', authenticity: 'verified', note: '已看房；重点问学区' }];
+  const built = buildObservations(reports, watchRows);
+  eq('收集器不做第二次过滤，全量映射', built.length, 2);
+  eq('收集器按报告编号排序', built[0].report_no, '011');
+  has('观察记录含三类诉求的证据布尔',
+    built.every(o => ['education', 'investment', 'owner_occupy'].every(g => typeof o.goal_evidence[g] === 'boolean')));
+  has('观察记录保留总价与来源档位', built[0].total_price_wan === 780 && built[0].provenance === 'verified');
+  has('清单备注只读附带，不参与判定', built[0].note === '已看房；重点问学区' && built[1].note === '');
+}
+
+{
+  // 只读保证：CLI 与库源码都不得出现写操作（ADR-0001 不新建状态文件）
+  const driftSrc = await readFile(join(ROOT, 'scripts', 'drift.mjs'), 'utf8').catch(() => '');
+  has('drift CLI 存在且零写入',
+    driftSrc.length > 0 && !/\b(writeFile|appendFile|mkdir|createWriteStream|rename|rm)\s*\(/.test(driftSrc));
+  const libSrc = await readFile(join(ROOT, 'scripts', 'lib', 'drift.mjs'), 'utf8').catch(() => '');
+  has('漂移库零写入', !/writeFile|appendFile|mkdir|createWriteStream/.test(libSrc));
+
+  // 文档/注册契约
+  const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8').catch(() => '{}'));
+  has('package.json 注册 drift 包装', pkg.scripts?.drift === 'node scripts/drift.mjs');
+  // README.md 是仓库根文件，不在分发副本里；缺文件时跳过，仓库形态仍断言
+  const readme = await readFile(join(ROOT, 'README.md'), 'utf8').catch(() => '');
+  if (readme) has('README 登记 drift 命令', readme.includes('scripts/drift.mjs'));
+  const doctor = await readFile(join(ROOT, 'scripts', 'doctor.mjs'), 'utf8').catch(() => '');
+  has('doctor sysFiles 登记 drift 模块与 CLI', doctor.includes('lib/drift.mjs') && doctor.includes('scripts/drift.mjs'));
+  const custom = await readFile(join(ROOT, 'modes', '_custom.template.md'), 'utf8').catch(() => '');
+  has('家规模板说明阈值覆盖方式', custom.includes('min_streak'));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含方向偏离信号', glossary.includes('**方向偏离信号**'));
+}
+
+// ---------- 方向偏离再确认（issue #34）：触发与话术 ----------
+
+{
+  const ob = (n, price, ev) => ({ report_no: n, total_price_wan: price, goal_evidence: { investment: ev } });
+  const drift = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [ob('011', 780, false), ob('012', 800, false), ob('013', 820, false)],
+  });
+  eq('drift 才触发再确认', shouldReconfirm(drift), true);
+  const aligned = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [ob('011', 480, true), ob('012', 490, true), ob('013', 500, true)],
+  });
+  eq('aligned 零插入', shouldReconfirm(aligned), false);
+  eq('undetermined 零插入', shouldReconfirm(detectDrift({ primary_goal: null, observations: [] })), false);
+  eq('空结果零插入', shouldReconfirm(null), false);
+  const prompt = reconfirmPrompt(drift);
+  has('话术含两个出口', Array.isArray(prompt?.options) && prompt.options.length === 2);
+  has('措辞中立不预设「你一定变了」',
+    /随手看看/.test(prompt.question) && !/你一定|肯定变|必须改/.test(prompt.question));
+  has('明确未确认不写用户层文件', /未.*确认.*不写/.test(prompt.caveat));
+}
+
+{
+  // 回归保护
+  const drift2 = detectDrift({
+    primary_goal: 'investment', walk_away_wan: 600,
+    observations: [
+      { report_no: '011', total_price_wan: 780, goal_evidence: { investment: false } },
+      { report_no: '012', total_price_wan: 800, goal_evidence: { investment: false } },
+      { report_no: '013', total_price_wan: 820, goal_evidence: { investment: false } },
+    ],
+  });
+  const prompt = reconfirmPrompt(drift2);
+  eq('非 drift 的话术返回 null', reconfirmPrompt(detectDrift({ primary_goal: null, observations: [] })), null);
+  has('两个出口都带 key/label/effect', prompt.options.every(o => o.key && o.label && o.effect));
+  has('话术携带信号依据', Array.isArray(prompt.signal_kinds) && prompt.signal_kinds.length >= 1);
+
+  // CLI 接线（本片红灯来源）
+  const cliSrc = await readFile(join(ROOT, 'scripts', 'drift.mjs'), 'utf8').catch(() => '');
+  has('CLI 仅在 drift 分支输出再确认话术',
+    cliSrc.includes('reconfirmPrompt') && cliSrc.includes('shouldReconfirm')
+    && cliSrc.lastIndexOf('reconfirmPrompt') > cliSrc.lastIndexOf('} else {'));
+  has('CLI 仍零写入', !/writeFile|appendFile|mkdir|createWriteStream/.test(cliSrc));
+
+  // 文档契约
+  const shared = await readFile(join(ROOT, 'modes', '_shared.md'), 'utf8').catch(() => '');
+  has('共享规则含方向偏离再确认节', /### 方向偏离再确认/.test(shared));
+  has('规则写明唯一触发条件', /唯一触发条件/.test(shared) && /仅当判定为/.test(shared));
+  has('规则写明禁止插入的时机', /新会话首次贴房源/.test(shared) && /带看后/.test(shared) && /长间隔/.test(shared));
+  has('规则写明确认后才按 intake 更新', /intake/.test(shared) && /确认后/.test(shared));
+  has('文档话术与 reconfirmPrompt 逐字一致（防漂移）',
+    shared.includes(prompt.question)
+    && prompt.options.every(o => shared.includes(o.label) && shared.includes(o.effect)));
+  has('规则列出适用模式', /适用模式/.test(shared) && shared.includes('evaluate'));
+  const evaluateDoc = await readFile(join(ROOT, 'modes', 'evaluate.md'), 'utf8').catch(() => '');
+  has('evaluate Post-evaluation 显式接线', /方向偏离再确认/.test(evaluateDoc) && /Post-evaluation/.test(evaluateDoc));
+  has('全局 NEVER 含零插入纪律', /NEVER[\s\S]*零插入/.test(shared));
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8').catch(() => '');
+  has('AGENTS 中立原则含再确认边界', agents.includes('再确认'));
+  const intake = await readFile(join(ROOT, 'modes', 'intake.md'), 'utf8').catch(() => '');
+  has('intake 引用再确认后更新轮次', intake.includes('再确认'));
+  const watchlist = await readFile(join(ROOT, 'modes', 'watchlist.md'), 'utf8').catch(() => '');
+  has('既有实采时效提醒保持原样（未被叠加再确认）', /时效提醒/.test(watchlist) && !/再确认/.test(watchlist));
+  const glossary = await readFile(join(ROOT, 'GLOSSARY.md'), 'utf8').catch(() => '');
+  if (glossary) has('术语表含再确认', glossary.includes('**再确认**'));
 }
 
 console.log(failed ? `\n⛔ ${failed} 项失败` : '\n✅ selftest 全部通过');
